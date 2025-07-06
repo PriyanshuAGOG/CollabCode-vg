@@ -160,7 +160,7 @@ export async function updateUserStatus(userId: string, status: "online" | "offli
 export function verifyAuth(bearerToken?: string | null): AuthUser | null {
   if (!bearerToken) return null
 
-  // Strip the “Bearer ” prefix if present
+  // Strip the "Bearer " prefix if present
   const token = bearerToken.replace(/^Bearer\s+/i, "")
   return verifyToken(token)
 }
