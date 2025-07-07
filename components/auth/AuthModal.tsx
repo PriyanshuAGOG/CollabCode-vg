@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useAuth } from "@/lib/hooks/useAuth"
+import { signUp, signIn, createUserProfile } from "@/lib/supabase"
 import { Sparkles, Mail, Lock, User, Eye, EyeOff } from "lucide-react"
 
 interface AuthModalProps {
@@ -17,7 +17,6 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
-  const { login, register } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
@@ -37,15 +36,19 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setIsLoading(true)
     setError("")
 
-    const result = await login(signInEmail, signInPassword)
+    try {
+      const { data, error } = await signIn(signInEmail, signInPassword)
 
-    if (result.success) {
-      onClose()
-    } else {
-      setError(result.error || "Login failed")
+      if (error) {
+        setError(error.message)
+      } else if (data.user) {
+        onClose()
+      }
+    } catch (err) {
+      setError("An unexpected error occurred")
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -65,15 +68,21 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       return
     }
 
-    const result = await register(signUpUsername, signUpEmail, signUpPassword)
+    try {
+      const { data, error } = await signUp(signUpEmail, signUpPassword, signUpUsername)
 
-    if (result.success) {
-      onClose()
-    } else {
-      setError(result.error || "Registration failed")
+      if (error) {
+        setError(error.message)
+      } else if (data.user) {
+        // Create user profile
+        await createUserProfile(data.user.id, signUpUsername, signUpEmail)
+        onClose()
+      }
+    } catch (err) {
+      setError("An unexpected error occurred")
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
   return (

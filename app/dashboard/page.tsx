@@ -1,18 +1,16 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { useAuth } from "@/lib/hooks/useAuth"
 import {
   Plus,
   Code,
   Globe,
   Star,
+  GitBranch,
   Users,
   Play,
   MoreHorizontal,
@@ -26,90 +24,90 @@ import {
 import Link from "next/link"
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const [user, setUser] = useState<any>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateProject, setShowCreateProject] = useState(false)
-  const [projects, setProjects] = useState([])
-  const [teams, setTeams] = useState([])
 
   useEffect(() => {
-    if (user) {
-      fetchProjects()
-      fetchTeams()
+    const userData = localStorage.getItem("collabcode_auth")
+    if (userData) {
+      setUser(JSON.parse(userData))
     }
-  }, [user])
+  }, [])
 
-  const fetchProjects = async () => {
-    try {
-      const response = await fetch("/api/projects")
-      if (response.ok) {
-        const data = await response.json()
-        setProjects(data.projects || [])
-      }
-    } catch (error) {
-      console.error("Failed to fetch projects:", error)
-    }
-  }
-
-  const fetchTeams = async () => {
-    try {
-      const response = await fetch("/api/teams")
-      if (response.ok) {
-        const data = await response.json()
-        setTeams(data.teams || [])
-      }
-    } catch (error) {
-      console.error("Failed to fetch teams:", error)
-    }
-  }
-
-  const handleCreateProject = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const formData = new FormData(e.target as HTMLFormElement)
-    const name = formData.get("name") as string
-    const framework = formData.get("framework") as string
-    const description = formData.get("description") as string
-
-    try {
-      const response = await fetch("/api/projects", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name, framework, description }),
-      })
-
-      if (response.ok) {
-        setShowCreateProject(false)
-        fetchProjects()
-      }
-    } catch (error) {
-      console.error("Failed to create project:", error)
-    }
-  }
+  const projects = [
+    {
+      id: "1",
+      name: "E-commerce Platform",
+      description: "Modern e-commerce solution with AI recommendations",
+      type: "Web App",
+      framework: "Next.js",
+      lastModified: "2 hours ago",
+      collaborators: 4,
+      status: "Active",
+      progress: 75,
+      starred: true,
+      commits: 24,
+      branches: 3,
+      thumbnail: "🛒",
+    },
+    {
+      id: "2",
+      name: "Mobile Banking App",
+      description: "Secure banking app with biometric authentication",
+      type: "Mobile App",
+      framework: "React Native",
+      lastModified: "1 day ago",
+      collaborators: 3,
+      status: "In Review",
+      progress: 90,
+      starred: false,
+      commits: 18,
+      branches: 2,
+      thumbnail: "🏦",
+    },
+    {
+      id: "3",
+      name: "AI Dashboard",
+      description: "Analytics dashboard with machine learning insights",
+      type: "Web App",
+      framework: "React",
+      lastModified: "3 days ago",
+      collaborators: 2,
+      status: "Active",
+      progress: 60,
+      starred: true,
+      commits: 31,
+      branches: 4,
+      thumbnail: "🤖",
+    },
+  ]
 
   const stats = [
-    { label: "Total Projects", value: projects.length.toString(), change: "+3", icon: Code, color: "text-bright-cyan" },
-    { label: "Active Teams", value: teams.length.toString(), change: "+2", icon: Users, color: "text-bright-purple" },
+    { label: "Total Projects", value: "12", change: "+3", icon: Code, color: "text-bright-cyan" },
+    { label: "Active Collaborations", value: "8", change: "+2", icon: Users, color: "text-bright-purple" },
     { label: "Lines of Code", value: "45.2K", change: "+12%", icon: Activity, color: "text-bright-cyan" },
     { label: "Deployments", value: "28", change: "+5", icon: Zap, color: "text-bright-purple" },
   ]
 
   const recentActivity = [
-    { action: "Created", project: "New Project", time: "2 hours ago", icon: Plus, color: "text-bright-cyan" },
-    { action: "Joined", project: "Team Collaboration", time: "4 hours ago", icon: Users, color: "text-bright-purple" },
-    { action: "Updated", project: "Dashboard", time: "1 day ago", icon: Activity, color: "text-success" },
+    { action: "Deployed", project: "E-commerce Platform", time: "2 hours ago", icon: Zap, color: "text-success" },
+    { action: "Committed to", project: "Mobile Banking App", time: "4 hours ago", icon: GitBranch, color: "text-info" },
+    { action: "Joined team", project: "AI Dashboard", time: "1 day ago", icon: Users, color: "text-bright-purple" },
+    { action: "Created", project: "Portfolio Website", time: "2 days ago", icon: Plus, color: "text-bright-cyan" },
   ]
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-deep-navy flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-text-primary mb-4">Please sign in to continue</h1>
-          <p className="text-text-secondary">You need to be authenticated to access the dashboard.</p>
-        </div>
-      </div>
-    )
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "Active":
+        return "bg-success/10 text-success border-success/20"
+      case "In Review":
+        return "bg-warning/10 text-warning border-warning/20"
+      case "Completed":
+        return "bg-info/10 text-info border-info/20"
+      default:
+        return "bg-slate-gray/10 text-text-muted border-slate-gray/20"
+    }
   }
 
   return (
@@ -123,9 +121,9 @@ export default function DashboardPage() {
                 <Sparkles className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-4xl font-bold text-text-primary">Welcome back, {user.username}! 👋</h1>
+                <h1 className="text-4xl font-bold text-text-primary">Welcome back, {user?.name || "Developer"}! 👋</h1>
                 <p className="text-text-secondary text-lg">
-                  Ready to build something amazing today? Your workspace awaits.
+                  Ready to build something amazing today? Your premium workspace awaits.
                 </p>
               </div>
             </div>
@@ -168,10 +166,10 @@ export default function DashboardPage() {
                     <Plus className="w-4 h-4 mr-2" />
                     New Project
                   </Button>
-                  <Link href="/projects">
+                  <Link href="/explore">
                     <Button
                       variant="outline"
-                      className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan bg-transparent"
+                      className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
                     >
                       View All
                     </Button>
@@ -180,86 +178,86 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-4">
-                {projects.length === 0 ? (
-                  <Card className="glass-card">
-                    <CardContent className="p-8 text-center">
-                      <Code className="w-12 h-12 text-text-muted mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-text-primary mb-2">No projects yet</h3>
-                      <p className="text-text-secondary mb-4">Create your first project to get started</p>
-                      <Button onClick={() => setShowCreateProject(true)} className="cyber-button text-white">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create Project
-                      </Button>
+                {projects.map((project, index) => (
+                  <Card
+                    key={project.id}
+                    className="glass-card hover:border-slate-gray/40 transition-all duration-300 hover:scale-[1.02] group animate-slide-in-up"
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-14 h-14 bg-gradient-to-r from-bright-purple/20 to-bright-cyan/20 rounded-xl flex items-center justify-center text-3xl border border-slate-gray/20">
+                            {project.thumbnail}
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-bold text-text-primary group-hover:text-bright-cyan transition-colors">
+                              {project.name}
+                            </h3>
+                            <p className="text-text-secondary text-sm">{project.description}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <Badge
+                                variant="outline"
+                                className="border-slate-gray/30 text-text-muted bg-dark-slate/30 text-xs"
+                              >
+                                {project.framework}
+                              </Badge>
+                              <Badge variant="outline" className={`text-xs ${getStatusColor(project.status)}`}>
+                                {project.status}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm" className="text-text-muted hover:text-yellow-400">
+                            <Star className={`w-4 h-4 ${project.starred ? "fill-yellow-400 text-yellow-400" : ""}`} />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="text-text-muted hover:text-text-primary">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-text-muted">Progress</span>
+                          <span className="text-text-primary font-medium">{project.progress}%</span>
+                        </div>
+                        <div className="w-full bg-dark-slate/50 rounded-full h-2">
+                          <div
+                            className="bg-button-gradient h-2 rounded-full transition-all duration-500"
+                            style={{ width: `${project.progress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-gray/20">
+                        <div className="flex items-center gap-4 text-sm text-text-muted">
+                          <div className="flex items-center gap-1">
+                            <GitBranch className="w-3 h-3" />
+                            {project.commits}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            {project.collaborators}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {project.lastModified}
+                          </div>
+                        </div>
+
+                        <Link href={`/project/${project.id}`}>
+                          <Button size="sm" className="cyber-button text-white">
+                            <Play className="w-3 h-3 mr-1" />
+                            Open
+                          </Button>
+                        </Link>
+                      </div>
                     </CardContent>
                   </Card>
-                ) : (
-                  projects.slice(0, 3).map((project: any, index) => (
-                    <Card
-                      key={project.id}
-                      className="glass-card hover:border-slate-gray/40 transition-all duration-300 hover:scale-[1.02] group animate-slide-in-up"
-                      style={{ animationDelay: `${index * 0.1}s` }}
-                    >
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 bg-gradient-to-r from-bright-purple/20 to-bright-cyan/20 rounded-xl flex items-center justify-center text-3xl border border-slate-gray/20">
-                              🚀
-                            </div>
-                            <div>
-                              <h3 className="text-xl font-bold text-text-primary group-hover:text-bright-cyan transition-colors line-clamp-1">
-                                {project.name}
-                              </h3>
-                              <p className="text-text-secondary text-sm">{project.description}</p>
-                              <div className="flex items-center gap-2 mt-2">
-                                <Badge
-                                  variant="outline"
-                                  className="border-slate-gray/30 text-text-muted bg-dark-slate/30 text-xs"
-                                >
-                                  {project.framework}
-                                </Badge>
-                                <Badge
-                                  variant="outline"
-                                  className="bg-success/10 text-success border-success/20 text-xs"
-                                >
-                                  {project.status}
-                                </Badge>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="sm" className="text-text-muted hover:text-yellow-400">
-                              <Star className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-text-muted hover:text-text-primary">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-gray/20">
-                          <div className="flex items-center gap-4 text-sm text-text-muted">
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {new Date(project.updated_at).toLocaleDateString()}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Users className="w-3 h-3" />
-                              {project.collaborators?.length || 1}
-                            </div>
-                          </div>
-
-                          <Link href={`/project/${project.id}`}>
-                            <Button size="sm" className="cyber-button text-white">
-                              <Play className="w-3 h-3 mr-1" />
-                              Open
-                            </Button>
-                          </Link>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
+                ))}
               </div>
             </div>
 
@@ -307,7 +305,7 @@ export default function DashboardPage() {
                   <Link href="/teams" className="block">
                     <Button
                       variant="outline"
-                      className="w-full border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan bg-transparent"
+                      className="w-full border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
                     >
                       <Users className="w-4 h-4 mr-2" />
                       Join Team
@@ -316,7 +314,7 @@ export default function DashboardPage() {
                   <Link href="/explore" className="block">
                     <Button
                       variant="outline"
-                      className="w-full border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan bg-transparent"
+                      className="w-full border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
                     >
                       <Globe className="w-4 h-4 mr-2" />
                       Browse Templates
@@ -361,51 +359,35 @@ export default function DashboardPage() {
                 <CardHeader>
                   <CardTitle className="text-text-primary">Create New Project</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleCreateProject} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">Project Name</label>
-                      <Input
-                        name="name"
-                        placeholder="Enter project name"
-                        className="premium-input text-text-primary"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">Framework</label>
-                      <select name="framework" className="w-full premium-input text-text-primary" required>
-                        <option value="">Select framework</option>
-                        <option value="react">React</option>
-                        <option value="nextjs">Next.js</option>
-                        <option value="vue">Vue.js</option>
-                        <option value="angular">Angular</option>
-                        <option value="svelte">Svelte</option>
-                        <option value="flutter">Flutter</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">Description</label>
-                      <textarea
-                        name="description"
-                        placeholder="Describe your project..."
-                        className="w-full premium-input text-text-primary h-20 resize-none"
-                      />
-                    </div>
-                    <div className="flex gap-3">
-                      <Button type="submit" className="flex-1 cyber-button text-white font-semibold">
-                        Create Project
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => setShowCreateProject(false)}
-                        variant="outline"
-                        className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </form>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-2">Project Name</label>
+                    <Input placeholder="Enter project name" className="premium-input text-text-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-2">Framework</label>
+                    <select className="w-full premium-input text-text-primary">
+                      <option value="react">React</option>
+                      <option value="nextjs">Next.js</option>
+                      <option value="vue">Vue.js</option>
+                      <option value="angular">Angular</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => setShowCreateProject(false)}
+                      className="flex-1 cyber-button text-white font-semibold"
+                    >
+                      Create Project
+                    </Button>
+                    <Button
+                      onClick={() => setShowCreateProject(false)}
+                      variant="outline"
+                      className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </div>

@@ -1,486 +1,897 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Search, Filter, Star, GitFork, Eye, Calendar, Users, Code, Lock, Award, Globe } from "lucide-react"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Search,
+  Star,
+  GitFork,
+  Download,
+  Eye,
+  TrendingUp,
+  Calendar,
+  Code,
+  Palette,
+  Smartphone,
+  Globe,
+  Database,
+  Zap,
+  Filter,
+  SortDesc,
+  Heart,
+  Share2,
+  ExternalLink,
+  Compass,
+  X,
+} from "lucide-react"
 
-// Mock data for projects
-const mockProjects = [
-  {
-    id: "1",
-    title: "React Todo App",
-    description:
-      "A beautiful todo application built with React and TypeScript. Features drag-and-drop, local storage, and dark mode.",
-    author: "john_doe",
-    authorAvatar: "/placeholder.svg?height=32&width=32",
-    stars: 245,
-    forks: 67,
-    views: 1200,
-    language: "TypeScript",
-    tags: ["React", "TypeScript", "CSS", "LocalStorage"],
-    createdAt: "2024-01-15",
-    updatedAt: "2024-01-20",
-    isPublic: true,
-    difficulty: "Beginner",
-    category: "Web Development",
-  },
-  {
-    id: "2",
-    title: "Python Data Visualizer",
-    description:
-      "Interactive data visualization tool using Python, Pandas, and Plotly. Perfect for analyzing CSV files and creating beautiful charts.",
-    author: "data_scientist",
-    authorAvatar: "/placeholder.svg?height=32&width=32",
-    stars: 189,
-    forks: 43,
-    views: 890,
-    language: "Python",
-    tags: ["Python", "Pandas", "Plotly", "Data Science"],
-    createdAt: "2024-01-10",
-    updatedAt: "2024-01-18",
-    isPublic: true,
-    difficulty: "Intermediate",
-    category: "Data Science",
-  },
-  {
-    id: "3",
-    title: "Node.js REST API",
-    description:
-      "Complete REST API with authentication, CRUD operations, and MongoDB integration. Includes comprehensive testing suite.",
-    author: "backend_dev",
-    authorAvatar: "/placeholder.svg?height=32&width=32",
-    stars: 156,
-    forks: 89,
-    views: 2100,
-    language: "JavaScript",
-    tags: ["Node.js", "Express", "MongoDB", "JWT"],
-    createdAt: "2024-01-05",
-    updatedAt: "2024-01-22",
-    isPublic: true,
-    difficulty: "Advanced",
-    category: "Backend",
-  },
-  {
-    id: "4",
-    title: "CSS Animation Library",
-    description:
-      "Collection of smooth CSS animations and transitions. Easy to use, lightweight, and customizable for any project.",
-    author: "css_wizard",
-    authorAvatar: "/placeholder.svg?height=32&width=32",
-    stars: 312,
-    forks: 78,
-    views: 1800,
-    language: "CSS",
-    tags: ["CSS", "Animations", "SCSS", "Frontend"],
-    createdAt: "2024-01-12",
-    updatedAt: "2024-01-19",
-    isPublic: true,
-    difficulty: "Intermediate",
-    category: "Frontend",
-  },
-  {
-    id: "5",
-    title: "Machine Learning Model",
-    description: "Image classification model using TensorFlow and Keras. Trained on custom dataset with 95% accuracy.",
-    author: "ml_engineer",
-    authorAvatar: "/placeholder.svg?height=32&width=32",
-    stars: 423,
-    forks: 156,
-    views: 3200,
-    language: "Python",
-    tags: ["Python", "TensorFlow", "Keras", "ML"],
-    createdAt: "2024-01-08",
-    updatedAt: "2024-01-21",
-    isPublic: true,
-    difficulty: "Advanced",
-    category: "Machine Learning",
-  },
-  {
-    id: "6",
-    title: "Vue.js Dashboard",
-    description:
-      "Modern admin dashboard with Vue 3, Composition API, and Chart.js. Responsive design with dark/light theme.",
-    author: "vue_master",
-    authorAvatar: "/placeholder.svg?height=32&width=32",
-    stars: 198,
-    forks: 45,
-    views: 1100,
-    language: "Vue",
-    tags: ["Vue.js", "Chart.js", "Dashboard", "Responsive"],
-    createdAt: "2024-01-14",
-    updatedAt: "2024-01-20",
-    isPublic: true,
-    difficulty: "Intermediate",
-    category: "Frontend",
-  },
-]
+interface Project {
+  id: string
+  name: string
+  description: string
+  author: string
+  avatar: string
+  stars: number
+  forks: number
+  downloads: number
+  views: number
+  category: string
+  tags: string[]
+  lastUpdated: string
+  isTemplate: boolean
+  thumbnail: string
+  featured: boolean
+}
+
+interface Template {
+  id: string
+  name: string
+  description: string
+  category: string
+  framework: string
+  features: string[]
+  downloads: number
+  rating: number
+  thumbnail: string
+  author: string
+  price: "free" | "premium"
+  featured: boolean
+}
 
 export default function ExplorePage() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("all")
-  const [selectedDifficulty, setSelectedDifficulty] = useState("all")
-  const [selectedLanguage, setSelectedLanguage] = useState("all")
-  const [sortBy, setSortBy] = useState("popular")
-  const [filteredProjects, setFilteredProjects] = useState(mockProjects)
+  const [selectedCategory, setSelectedCategory] = useState("All")
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
+  const [sortBy, setSortBy] = useState("trending")
 
-  // Filter and search logic
-  useEffect(() => {
-    const filtered = mockProjects.filter((project) => {
-      const matchesSearch =
-        project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        project.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-
-      const matchesCategory = selectedCategory === "all" || project.category === selectedCategory
-      const matchesDifficulty = selectedDifficulty === "all" || project.difficulty === selectedDifficulty
-      const matchesLanguage = selectedLanguage === "all" || project.language === selectedLanguage
-
-      return matchesSearch && matchesCategory && matchesDifficulty && matchesLanguage
-    })
-
-    // Sort projects
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case "popular":
-          return b.stars - a.stars
-        case "recent":
-          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        case "views":
-          return b.views - a.views
-        case "forks":
-          return b.forks - a.forks
-        default:
-          return 0
-      }
-    })
-
-    setFilteredProjects(filtered)
-  }, [searchQuery, selectedCategory, selectedDifficulty, selectedLanguage, sortBy])
-
-  const categories = [
-    "all",
-    "Web Development",
-    "Data Science",
-    "Backend",
-    "Frontend",
-    "Machine Learning",
-    "Mobile",
-    "DevOps",
+  const projects: Project[] = [
+    {
+      id: "1",
+      name: "React Dashboard Pro",
+      description:
+        "Modern admin dashboard with real-time analytics, beautiful charts, and comprehensive user management system",
+      author: "Sarah Chen",
+      avatar: "SC",
+      stars: 1247,
+      forks: 234,
+      downloads: 5678,
+      views: 12340,
+      category: "Web",
+      tags: ["React", "TypeScript", "Dashboard", "Analytics"],
+      lastUpdated: "2 days ago",
+      isTemplate: true,
+      thumbnail: "/placeholder.svg?height=200&width=300",
+      featured: true,
+    },
+    {
+      id: "2",
+      name: "Mobile Banking App",
+      description:
+        "Secure mobile banking application with biometric authentication and real-time transaction monitoring",
+      author: "Mike Johnson",
+      avatar: "MJ",
+      stars: 892,
+      forks: 156,
+      downloads: 3421,
+      views: 8765,
+      category: "Mobile",
+      tags: ["React Native", "Security", "Banking", "Biometric"],
+      lastUpdated: "1 week ago",
+      isTemplate: false,
+      thumbnail: "/placeholder.svg?height=200&width=300",
+      featured: false,
+    },
+    {
+      id: "3",
+      name: "E-commerce Platform",
+      description: "Full-stack e-commerce solution with payment integration, inventory management, and admin dashboard",
+      author: "Emma Davis",
+      avatar: "ED",
+      stars: 2156,
+      forks: 445,
+      downloads: 8901,
+      views: 18765,
+      category: "Web",
+      tags: ["Next.js", "E-commerce", "Stripe", "PostgreSQL"],
+      lastUpdated: "3 days ago",
+      isTemplate: true,
+      thumbnail: "/placeholder.svg?height=200&width=300",
+      featured: true,
+    },
+    {
+      id: "4",
+      name: "AI Chat Interface",
+      description:
+        "Beautiful chat interface with AI integration, real-time messaging, and advanced conversation features",
+      author: "Alex Chen",
+      avatar: "AC",
+      stars: 1567,
+      forks: 289,
+      downloads: 4532,
+      views: 11234,
+      category: "AI/ML",
+      tags: ["React", "AI", "Chat", "WebSocket"],
+      lastUpdated: "5 days ago",
+      isTemplate: true,
+      thumbnail: "/placeholder.svg?height=200&width=300",
+      featured: false,
+    },
   ]
-  const difficulties = ["all", "Beginner", "Intermediate", "Advanced"]
-  const languages = ["all", "JavaScript", "TypeScript", "Python", "CSS", "Vue", "React", "Node.js"]
 
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case "Beginner":
-        return "bg-green-500/20 text-green-300 border-green-500/30"
-      case "Intermediate":
-        return "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"
-      case "Advanced":
-        return "bg-red-500/20 text-red-300 border-red-500/30"
+  const templates: Template[] = [
+    {
+      id: "1",
+      name: "SaaS Landing Page",
+      description:
+        "Modern landing page template for SaaS products with pricing tables, testimonials, and conversion optimization",
+      category: "Web",
+      framework: "Next.js",
+      features: ["Responsive Design", "Dark Mode", "SEO Optimized", "Analytics"],
+      downloads: 12450,
+      rating: 4.8,
+      thumbnail: "/placeholder.svg?height=200&width=300",
+      author: "Design Studio",
+      price: "free",
+      featured: true,
+    },
+    {
+      id: "2",
+      name: "Mobile App UI Kit",
+      description: "Complete UI kit for mobile applications with 50+ screens, components, and design system",
+      category: "Mobile",
+      framework: "React Native",
+      features: ["50+ Screens", "Dark/Light Theme", "Animations", "TypeScript"],
+      downloads: 8765,
+      rating: 4.9,
+      thumbnail: "/placeholder.svg?height=200&width=300",
+      author: "UI Masters",
+      price: "premium",
+      featured: true,
+    },
+    {
+      id: "3",
+      name: "Admin Dashboard",
+      description:
+        "Professional admin dashboard with charts, tables, user management, and real-time data visualization",
+      category: "Web",
+      framework: "React",
+      features: ["Charts & Analytics", "User Management", "Real-time Data", "Responsive"],
+      downloads: 15678,
+      rating: 4.7,
+      thumbnail: "/placeholder.svg?height=200&width=300",
+      author: "Dashboard Pro",
+      price: "free",
+      featured: false,
+    },
+    {
+      id: "4",
+      name: "E-commerce Store",
+      description: "Complete e-commerce solution with shopping cart, checkout, payment integration, and admin panel",
+      category: "Web",
+      framework: "Next.js",
+      features: ["Shopping Cart", "Payment Gateway", "Inventory", "Admin Panel"],
+      downloads: 9876,
+      rating: 4.6,
+      thumbnail: "/placeholder.svg?height=200&width=300",
+      author: "Commerce Team",
+      price: "premium",
+      featured: false,
+    },
+  ]
+
+  const categories = ["All", "Web", "Mobile", "AI/ML", "Backend", "Design"]
+
+  const filteredProjects = projects.filter((project) => {
+    const matchesSearch =
+      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+
+    const matchesCategory = selectedCategory === "All" || project.category === selectedCategory
+
+    return matchesSearch && matchesCategory
+  })
+
+  const filteredTemplates = templates.filter((template) => {
+    const matchesSearch =
+      template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      template.description.toLowerCase().includes(searchQuery.toLowerCase())
+
+    const matchesCategory = selectedCategory === "All" || template.category === selectedCategory
+
+    return matchesSearch && matchesCategory
+  })
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case "Web":
+        return <Globe className="w-4 h-4" />
+      case "Mobile":
+        return <Smartphone className="w-4 h-4" />
+      case "AI/ML":
+        return <Zap className="w-4 h-4" />
+      case "Backend":
+        return <Database className="w-4 h-4" />
+      case "Design":
+        return <Palette className="w-4 h-4" />
       default:
-        return "bg-gray-500/20 text-gray-300 border-gray-500/30"
+        return <Code className="w-4 h-4" />
     }
   }
 
-  const getLanguageColor = (language: string) => {
-    const colors: Record<string, string> = {
-      JavaScript: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
-      TypeScript: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-      Python: "bg-green-500/20 text-green-300 border-green-500/30",
-      CSS: "bg-purple-500/20 text-purple-300 border-purple-500/30",
-      Vue: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-      React: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
-    }
-    return colors[language] || "bg-gray-500/20 text-gray-300 border-gray-500/30"
+  const handleInstallTemplate = (templateId: string) => {
+    console.log("Installing template:", templateId)
+    alert("Template installed successfully!")
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0A0A0F] via-[#1A1A2E] to-[#16213E] text-white relative overflow-hidden">
-      {/* Animated Background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-500/5 via-purple-500/3 to-transparent" />
-      <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(68,68,68,.05)_50%,transparent_75%,transparent_100%)] bg-[length:60px_60px] animate-pulse opacity-30" />
-
-      {/* COMING SOON OVERLAY */}
-      <div className="absolute inset-0 z-50 backdrop-blur-md bg-black/30 flex items-center justify-center">
-        <div className="text-center max-w-2xl mx-auto px-6">
-          {/* Lock Icon with Glow */}
-          <div className="relative mb-8">
-            <div className="w-24 h-24 mx-auto bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 rounded-full flex items-center justify-center shadow-2xl">
-              <Lock className="w-12 h-12 text-white" />
-            </div>
-            <div className="absolute inset-0 w-24 h-24 mx-auto bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 rounded-full blur-xl opacity-50 animate-pulse" />
-          </div>
-
-          {/* Coming Soon Text */}
-          <h1 className="text-6xl font-bold mb-6 bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
-            Coming Soon
-          </h1>
-
-          <p className="text-xl text-gray-300 mb-8 leading-relaxed">
-            We're building something amazing! The Explore page will feature thousands of open-source projects,
-            templates, and collaborative coding examples from our community.
-          </p>
-
-          {/* Feature Preview */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-              <Globe className="w-8 h-8 text-cyan-400 mb-3 mx-auto" />
-              <h3 className="font-semibold mb-2">Public Projects</h3>
-              <p className="text-sm text-gray-400">Browse thousands of open-source projects</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-              <Award className="w-8 h-8 text-purple-400 mb-3 mx-auto" />
-              <h3 className="font-semibold mb-2">Featured Work</h3>
-              <p className="text-sm text-gray-400">Discover trending and featured projects</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-              <Users className="w-8 h-8 text-pink-400 mb-3 mx-auto" />
-              <h3 className="font-semibold mb-2">Community</h3>
-              <p className="text-sm text-gray-400">Connect with developers worldwide</p>
-            </div>
-          </div>
-
-          {/* Loading Animation */}
-          <div className="flex items-center justify-center space-x-2 mb-8">
-            <div className="w-3 h-3 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-            <div className="w-3 h-3 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-            <div className="w-3 h-3 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-          </div>
-
-          {/* Call to Action */}
-          <div className="space-y-4">
-            <p className="text-gray-400">Want to be notified when it launches?</p>
-            <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
-              <Input
-                placeholder="Enter your email"
-                className="bg-white/10 border-white/20 text-white placeholder-gray-400"
-                disabled
-              />
-              <Button
-                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold px-8"
-                disabled
-              >
-                Notify Me
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* BLURRED ORIGINAL CONTENT BELOW */}
-      <div className="blur-sm pointer-events-none select-none">
-        {/* Header */}
-        <div className="relative z-10 border-b border-white/10 bg-black/20 backdrop-blur-xl">
-          <div className="max-w-7xl mx-auto px-6 py-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-              <div>
-                <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
-                  Explore Projects
-                </h1>
-                <p className="text-gray-400 text-lg">Discover amazing projects from our community of developers</p>
+    <div className="min-h-screen bg-deep-navy">
+      <div className="cyber-grid min-h-screen">
+        <div className="container mx-auto px-4 py-8">
+          {/* Header */}
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-button-gradient rounded-xl flex items-center justify-center shadow-purple-glow">
+                <Compass className="w-6 h-6 text-white" />
               </div>
+              <div>
+                <h1 className="text-4xl font-bold gradient-text">Explore & Discover</h1>
+                <p className="text-text-secondary mt-1">
+                  Discover trending projects, templates, and inspiration from our community
+                </p>
+              </div>
+            </div>
+          </div>
 
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          {/* Search and Filters */}
+          <div className="mb-8">
+            <div className="glass-card p-6 rounded-2xl">
+              <div className="flex flex-col lg:flex-row gap-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-text-muted w-5 h-5" />
                   <Input
-                    placeholder="Search projects, tags, or authors..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 w-80 bg-white/10 border-white/20 text-white placeholder-gray-400"
+                    placeholder="Search projects, templates, or technologies..."
+                    className="pl-12 h-12 premium-input text-lg"
                   />
                 </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
+                  >
+                    <Filter className="w-4 h-4 mr-2" />
+                    Filter
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
+                  >
+                    <SortDesc className="w-4 h-4 mr-2" />
+                    Sort
+                  </Button>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Filters */}
-        <div className="relative z-10 bg-black/10 backdrop-blur-sm border-b border-white/5">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-gray-400" />
-                <span className="text-sm text-gray-400">Filters:</span>
-              </div>
-
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-sm text-white"
-              >
+              <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
                 {categories.map((category) => (
-                  <option key={category} value={category} className="bg-gray-800">
-                    {category === "all" ? "All Categories" : category}
-                  </option>
+                  <Button
+                    key={category}
+                    variant={selectedCategory === category ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedCategory(category)}
+                    className={
+                      selectedCategory === category
+                        ? "cyber-button text-white whitespace-nowrap"
+                        : "border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan whitespace-nowrap"
+                    }
+                  >
+                    {getCategoryIcon(category)}
+                    <span className="ml-2">{category}</span>
+                  </Button>
                 ))}
-              </select>
-
-              <select
-                value={selectedDifficulty}
-                onChange={(e) => setSelectedDifficulty(e.target.value)}
-                className="bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-sm text-white"
-              >
-                {difficulties.map((difficulty) => (
-                  <option key={difficulty} value={difficulty} className="bg-gray-800">
-                    {difficulty === "all" ? "All Levels" : difficulty}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={selectedLanguage}
-                onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-sm text-white"
-              >
-                {languages.map((language) => (
-                  <option key={language} value={language} className="bg-gray-800">
-                    {language === "all" ? "All Languages" : language}
-                  </option>
-                ))}
-              </select>
-
-              <div className="ml-auto flex items-center gap-2">
-                <span className="text-sm text-gray-400">Sort by:</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-sm text-white"
-                >
-                  <option value="popular" className="bg-gray-800">
-                    Most Popular
-                  </option>
-                  <option value="recent" className="bg-gray-800">
-                    Recently Updated
-                  </option>
-                  <option value="views" className="bg-gray-800">
-                    Most Viewed
-                  </option>
-                  <option value="forks" className="bg-gray-800">
-                    Most Forked
-                  </option>
-                </select>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Projects Grid */}
-        <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProjects.map((project) => (
-              <Card
-                key={project.id}
-                className="bg-white/5 backdrop-blur-sm border-white/10 hover:bg-white/10 transition-all duration-300 group"
+          {/* Tabs */}
+          <Tabs defaultValue="projects" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-dark-slate/50 border border-slate-gray/20 p-1 rounded-xl">
+              <TabsTrigger
+                value="projects"
+                className="data-[state=active]:bg-bright-purple data-[state=active]:text-white data-[state=active]:shadow-purple-glow rounded-lg"
               >
-                <CardHeader className="pb-3">
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Trending Projects
+              </TabsTrigger>
+              <TabsTrigger
+                value="templates"
+                className="data-[state=active]:bg-bright-cyan data-[state=active]:text-deep-navy data-[state=active]:shadow-cyan-glow rounded-lg"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Template Marketplace
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="projects" className="mt-8">
+              {/* Featured Projects */}
+              {filteredProjects.some((p) => p.featured) && (
+                <div className="mb-8">
+                  <h2 className="text-2xl font-bold text-text-primary mb-4 flex items-center gap-2">
+                    <Star className="w-6 h-6 text-bright-purple" />
+                    Featured Projects
+                  </h2>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    {filteredProjects
+                      .filter((p) => p.featured)
+                      .map((project) => (
+                        <Card
+                          key={project.id}
+                          className="glass-card border-bright-purple/20 hover:border-bright-purple/40 transition-all duration-300 hover:scale-[1.02] group overflow-hidden"
+                        >
+                          <CardHeader className="pb-3">
+                            <div className="aspect-video bg-slate-gray/30 rounded-xl mb-4 overflow-hidden relative">
+                              <img
+                                src={project.thumbnail || "/placeholder.svg"}
+                                alt={project.name}
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                              />
+                              <div className="absolute top-3 right-3">
+                                <Badge className="bg-bright-purple/90 text-white border-0">Featured</Badge>
+                              </div>
+                            </div>
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <CardTitle className="text-xl text-text-primary group-hover:text-bright-purple transition-colors">
+                                  {project.name}
+                                </CardTitle>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Avatar className="w-6 h-6">
+                                    <AvatarFallback className="bg-button-gradient text-white text-xs">
+                                      {project.avatar}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-sm text-text-muted">{project.author}</span>
+                                </div>
+                              </div>
+                              {project.isTemplate && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-bright-cyan text-bright-cyan bg-bright-cyan/10"
+                                >
+                                  Template
+                                </Badge>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-text-secondary text-sm mb-4 leading-relaxed">{project.description}</p>
+
+                            <div className="flex flex-wrap gap-2 mb-4">
+                              {project.tags.slice(0, 4).map((tag) => (
+                                <Badge
+                                  key={tag}
+                                  variant="outline"
+                                  className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                                >
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+
+                            <div className="flex items-center justify-between text-sm text-text-muted mb-4">
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1">
+                                  <Star className="w-3 h-3 text-bright-purple" />
+                                  {project.stars.toLocaleString()}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <GitFork className="w-3 h-3" />
+                                  {project.forks}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Eye className="w-3 h-3" />
+                                  {project.views.toLocaleString()}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {project.lastUpdated}
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button size="sm" className="flex-1 cyber-button text-white">
+                                <Eye className="w-3 h-3 mr-2" />
+                                View Project
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
+                              >
+                                <Heart className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
+                              >
+                                <Share2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* All Projects */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredProjects
+                  .filter((p) => !p.featured)
+                  .map((project) => (
+                    <Card
+                      key={project.id}
+                      className="glass-card hover:border-slate-gray/40 transition-all duration-300 hover:scale-105 group"
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="aspect-video bg-slate-gray/30 rounded-lg mb-3 overflow-hidden">
+                          <img
+                            src={project.thumbnail || "/placeholder.svg"}
+                            alt={project.name}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          />
+                        </div>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-lg text-text-primary group-hover:text-bright-purple transition-colors">
+                              {project.name}
+                            </CardTitle>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Avatar className="w-5 h-5">
+                                <AvatarFallback className="bg-button-gradient text-white text-xs">
+                                  {project.avatar}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-sm text-text-muted">{project.author}</span>
+                            </div>
+                          </div>
+                          {project.isTemplate && (
+                            <Badge variant="outline" className="border-bright-cyan text-bright-cyan bg-bright-cyan/10">
+                              Template
+                            </Badge>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-text-secondary text-sm mb-4 leading-relaxed line-clamp-2">
+                          {project.description}
+                        </p>
+
+                        <div className="flex flex-wrap gap-1 mb-4">
+                          {project.tags.slice(0, 3).map((tag) => (
+                            <Badge
+                              key={tag}
+                              variant="outline"
+                              className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                          {project.tags.length > 3 && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                            >
+                              +{project.tags.length - 3}
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between text-sm text-text-muted mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1">
+                              <Star className="w-3 h-3 text-bright-purple" />
+                              {project.stars}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <GitFork className="w-3 h-3" />
+                              {project.forks}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {project.lastUpdated}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button size="sm" className="flex-1 cyber-button text-white">
+                            <Eye className="w-3 h-3 mr-1" />
+                            View
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
+                          >
+                            <Star className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="templates" className="mt-8">
+              {/* Featured Templates */}
+              {filteredTemplates.some((t) => t.featured) && (
+                <div className="mb-8">
+                  <h2 className="text-2xl font-bold text-text-primary mb-4 flex items-center gap-2">
+                    <Star className="w-6 h-6 text-bright-cyan" />
+                    Featured Templates
+                  </h2>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    {filteredTemplates
+                      .filter((t) => t.featured)
+                      .map((template) => (
+                        <Card
+                          key={template.id}
+                          className="glass-card border-bright-cyan/20 hover:border-bright-cyan/40 transition-all duration-300 hover:scale-[1.02] group cursor-pointer overflow-hidden"
+                          onClick={() => setSelectedTemplate(template)}
+                        >
+                          <CardHeader className="pb-3">
+                            <div className="aspect-video bg-slate-gray/30 rounded-xl mb-4 overflow-hidden relative">
+                              <img
+                                src={template.thumbnail || "/placeholder.svg"}
+                                alt={template.name}
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                              />
+                              <div className="absolute top-3 right-3">
+                                <Badge className="bg-bright-cyan/90 text-deep-navy border-0 font-semibold">
+                                  Featured
+                                </Badge>
+                              </div>
+                              <div className="absolute top-3 left-3">
+                                <Badge
+                                  className={
+                                    template.price === "free"
+                                      ? "bg-green-500/90 text-white border-0"
+                                      : "bg-yellow-500/90 text-deep-navy border-0 font-semibold"
+                                  }
+                                >
+                                  {template.price}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <CardTitle className="text-xl text-text-primary group-hover:text-bright-cyan transition-colors">
+                                  {template.name}
+                                </CardTitle>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className="text-sm text-text-muted">{template.author}</span>
+                                  <div className="flex items-center gap-1">
+                                    <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                                    <span className="text-sm text-text-muted">{template.rating}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-text-secondary text-sm mb-4 leading-relaxed">{template.description}</p>
+
+                            <div className="mb-4">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                                >
+                                  {template.framework}
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                                >
+                                  {template.category}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {template.features.slice(0, 3).map((feature) => (
+                                  <Badge
+                                    key={feature}
+                                    variant="outline"
+                                    className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                                  >
+                                    {feature}
+                                  </Badge>
+                                ))}
+                                {template.features.length > 3 && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                                  >
+                                    +{template.features.length - 3}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between text-sm text-text-muted mb-4">
+                              <div className="flex items-center gap-1">
+                                <Download className="w-3 h-3" />
+                                {template.downloads.toLocaleString()}
+                              </div>
+                            </div>
+
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleInstallTemplate(template.id)
+                              }}
+                              className="w-full bg-bright-cyan hover:bg-bright-cyan/80 text-deep-navy font-semibold shadow-cyan-glow"
+                            >
+                              <Download className="w-4 h-4 mr-2" />
+                              Install Template
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* All Templates */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredTemplates
+                  .filter((t) => !t.featured)
+                  .map((template) => (
+                    <Card
+                      key={template.id}
+                      className="glass-card hover:border-slate-gray/40 transition-all duration-300 hover:scale-105 group cursor-pointer"
+                      onClick={() => setSelectedTemplate(template)}
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="aspect-video bg-slate-gray/30 rounded-lg mb-3 overflow-hidden relative">
+                          <img
+                            src={template.thumbnail || "/placeholder.svg"}
+                            alt={template.name}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          />
+                          <div className="absolute top-2 left-2">
+                            <Badge
+                              className={
+                                template.price === "free"
+                                  ? "bg-green-500/90 text-white border-0 text-xs"
+                                  : "bg-yellow-500/90 text-deep-navy border-0 text-xs font-semibold"
+                              }
+                            >
+                              {template.price}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-lg text-text-primary group-hover:text-bright-cyan transition-colors">
+                              {template.name}
+                            </CardTitle>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-sm text-text-muted">{template.author}</span>
+                              <div className="flex items-center gap-1">
+                                <Star className="w-3 h-3 text-yellow-400 fill-current" />
+                                <span className="text-sm text-text-muted">{template.rating}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-text-secondary text-sm mb-4 leading-relaxed line-clamp-2">
+                          {template.description}
+                        </p>
+
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                            >
+                              {template.framework}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {template.features.slice(0, 2).map((feature) => (
+                              <Badge
+                                key={feature}
+                                variant="outline"
+                                className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                              >
+                                {feature}
+                              </Badge>
+                            ))}
+                            {template.features.length > 2 && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                              >
+                                +{template.features.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-sm text-text-muted mb-4">
+                          <div className="flex items-center gap-1">
+                            <Download className="w-3 h-3" />
+                            {template.downloads.toLocaleString()}
+                          </div>
+                        </div>
+
+                        <Button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleInstallTemplate(template.id)
+                          }}
+                          className="w-full bg-bright-cyan hover:bg-bright-cyan/80 text-deep-navy font-semibold"
+                        >
+                          <Download className="w-3 h-3 mr-2" />
+                          Install
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          {/* Template Preview Modal */}
+          {selectedTemplate && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <Card className="w-full max-w-4xl glass-card border-slate-gray/30 max-h-[90vh] overflow-auto">
+                <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <CardTitle className="text-lg font-semibold text-white group-hover:text-purple-300 transition-colors">
-                        {project.title}
-                      </CardTitle>
-                      <div className="flex items-center gap-2 mt-2">
-                        <img
-                          src={project.authorAvatar || "/placeholder.svg"}
-                          alt={project.author}
-                          className="w-5 h-5 rounded-full"
-                        />
-                        <span className="text-sm text-gray-400">{project.author}</span>
+                      <CardTitle className="text-3xl text-text-primary mb-2">{selectedTemplate.name}</CardTitle>
+                      <div className="flex items-center gap-4">
+                        <span className="text-text-muted">by {selectedTemplate.author}</span>
+                        <Badge
+                          className={
+                            selectedTemplate.price === "free"
+                              ? "bg-green-500/20 border-green-500 text-green-400"
+                              : "bg-yellow-500/20 border-yellow-500 text-yellow-400"
+                          }
+                        >
+                          {selectedTemplate.price}
+                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                          <span className="text-text-muted">{selectedTemplate.rating}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-text-muted">
+                          <Download className="w-4 h-4" />
+                          {selectedTemplate.downloads.toLocaleString()} downloads
+                        </div>
                       </div>
-                    </div>
-                    <Badge className={getDifficultyColor(project.difficulty)}>{project.difficulty}</Badge>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="space-y-4">
-                  <CardDescription className="text-gray-300 line-clamp-2">{project.description}</CardDescription>
-
-                  <div className="flex flex-wrap gap-2">
-                    {project.tags.slice(0, 3).map((tag) => (
-                      <Badge key={tag} variant="outline" className="text-xs border-white/20 text-gray-300">
-                        {tag}
-                      </Badge>
-                    ))}
-                    {project.tags.length > 3 && (
-                      <Badge variant="outline" className="text-xs border-white/20 text-gray-400">
-                        +{project.tags.length - 3}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm text-gray-400">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-1">
-                        <Star className="w-4 h-4" />
-                        <span>{project.stars}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <GitFork className="w-4 h-4" />
-                        <span>{project.forks}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Eye className="w-4 h-4" />
-                        <span>{project.views}</span>
-                      </div>
-                    </div>
-                    <Badge className={getLanguageColor(project.language)}>{project.language}</Badge>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <Calendar className="w-3 h-3" />
-                      <span>Updated {new Date(project.updatedAt).toLocaleDateString()}</span>
                     </div>
                     <Button
+                      variant="ghost"
                       size="sm"
-                      className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                      onClick={() => setSelectedTemplate(null)}
+                      className="text-text-muted hover:text-text-primary"
                     >
-                      <Code className="w-4 h-4 mr-1" />
-                      View Code
+                      <X className="w-5 h-5" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="aspect-video bg-slate-gray/30 rounded-xl mb-6 overflow-hidden">
+                    <img
+                      src={selectedTemplate.thumbnail || "/placeholder.svg"}
+                      alt={selectedTemplate.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <p className="text-text-secondary leading-relaxed mb-6 text-lg">{selectedTemplate.description}</p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                      <h4 className="font-semibold text-text-primary mb-3">Framework & Category</h4>
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className="border-slate-gray/30 text-text-muted bg-dark-slate/30">
+                          {selectedTemplate.framework}
+                        </Badge>
+                        <Badge variant="outline" className="border-slate-gray/30 text-text-muted bg-dark-slate/30">
+                          {selectedTemplate.category}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-text-primary mb-3">Statistics</h4>
+                      <div className="flex items-center gap-4 text-text-muted">
+                        <div className="flex items-center gap-1">
+                          <Download className="w-4 h-4" />
+                          {selectedTemplate.downloads.toLocaleString()}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                          {selectedTemplate.rating}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <h4 className="font-semibold text-text-primary mb-3">Features</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedTemplate.features.map((feature) => (
+                        <Badge
+                          key={feature}
+                          variant="outline"
+                          className="border-slate-gray/30 text-text-muted bg-dark-slate/30"
+                        >
+                          {feature}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => handleInstallTemplate(selectedTemplate.id)}
+                      className="flex-1 bg-bright-cyan hover:bg-bright-cyan/80 text-deep-navy font-semibold shadow-cyan-glow"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Install Template
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Preview
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-slate-gray/30 text-text-secondary hover:text-bright-cyan hover:border-bright-cyan"
+                    >
+                      <Heart className="w-4 h-4" />
                     </Button>
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-
-          {filteredProjects.length === 0 && (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Search className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-2">No projects found</h3>
-              <p className="text-gray-400">Try adjusting your search criteria or filters</p>
             </div>
           )}
-        </div>
-
-        {/* Stats Section */}
-        <div className="relative z-10 bg-black/20 backdrop-blur-xl border-t border-white/10">
-          <div className="max-w-7xl mx-auto px-6 py-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-purple-400 mb-2">1,247</div>
-                <div className="text-sm text-gray-400">Total Projects</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-pink-400 mb-2">8,932</div>
-                <div className="text-sm text-gray-400">Active Developers</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-cyan-400 mb-2">45,678</div>
-                <div className="text-sm text-gray-400">Code Contributions</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-green-400 mb-2">156</div>
-                <div className="text-sm text-gray-400">Languages Supported</div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
