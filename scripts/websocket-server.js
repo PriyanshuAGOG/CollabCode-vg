@@ -1,13 +1,10 @@
-// WebSocket Server for Real-time Features
-// Handles chat, collaboration, and presence
-
 const { Server } = require("socket.io")
 const { createServer } = require("http")
 
 const httpServer = createServer()
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000",
+    origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -19,375 +16,408 @@ const activeUsers = new Map()
 const projectRooms = new Map()
 const typingUsers = new Map()
 
-console.log("🚀 Starting WebSocket server...")
+console.log("🚀 Starting CollabCode WebSocket Server...")
 
 io.on("connection", (socket) => {
-  const { userId, username, projectId } = socket.handshake.query
+  console.log(`✅ User connected: ${socket.id}`)
 
-  console.log(`✅ User connected: ${username} (${userId})`)
+  // Handle user authentication
+  socket.on("authenticate", (userData) => {
+    activeUsers.set(socket.id, {
+      ...userData,
+      socketId: socket.id,
+      lastSeen: new Date(),
+    })
 
-  // Store user info
-  activeUsers.set(socket.id, {
-    userId,
-    username,
-    socketId: socket.id,
-    joinedAt: new Date(),
-    currentProject: projectId || null,
-    status: "online",
+    console.log(`🔐 User authenticated: ${userData.username} (${socket.id})`)
+
+    // Broadcast user online status
+    socket.broadcast.emit("user_online", {
+      userId: userData.id,
+      username: userData.username,
+      status: "online",
+    })
   })
 
-  // Join project room if specified
-  if (projectId) {
-    socket.join(`project:${projectId}`)
+  // Handle joining project rooms
+  socket.on("join_project", (projectId) => {
+    socket.join(`project_${projectId}`)
 
     if (!projectRooms.has(projectId)) {
       projectRooms.set(projectId, new Set())
     }
     projectRooms.get(projectId).add(socket.id)
 
-    // Notify others in the project
-    socket.to(`project:${projectId}`).emit("user-joined", {
-      userId,
-      username,
-      joinedAt: new Date(),
-    })
-
-    // Send current project users to the new user
-    const projectUsers = Array.from(projectRooms.get(projectId))
-      .map((socketId) => activeUsers.get(socketId))
-      .filter(Boolean)
-
-    socket.emit("presence-update", projectUsers)
-  }
-
-  // Handle project joining
-  socket.on("join-project", ({ projectId: newProjectId }) => {
-    // Leave current project if any
-    const currentProject = activeUsers.get(socket.id)?.currentProject
-    if (currentProject) {
-      socket.leave(`project:${currentProject}`)
-      if (projectRooms.has(currentProject)) {
-        projectRooms.get(currentProject).delete(socket.id)
-        socket.to(`project:${currentProject}`).emit("user-left", userId)
-      }
-    }
-
-    // Join new project
-    socket.join(`project:${newProjectId}`)
-    if (!projectRooms.has(newProjectId)) {
-      projectRooms.set(newProjectId, new Set())
-    }
-    projectRooms.get(newProjectId).add(socket.id)
-
-    // Update user's current project
     const user = activeUsers.get(socket.id)
     if (user) {
-      user.currentProject = newProjectId
-    }
+      console.log(`👥 ${user.username} joined project: ${projectId}`)
 
-    // Notify others
-    socket.to(`project:${newProjectId}`).emit("user-joined", {
-      userId,
-      username,
-      joinedAt: new Date(),
-    })
-
-    // Send current project users
-    const projectUsers = Array.from(projectRooms.get(newProjectId))
-      .map((socketId) => activeUsers.get(socketId))
-      .filter(Boolean)
-
-    socket.emit("presence-update", projectUsers)
-  })
-
-  // Handle project leaving
-  socket.on("leave-project", ({ projectId: leaveProjectId }) => {
-    socket.leave(`project:${leaveProjectId}`)
-    if (projectRooms.has(leaveProjectId)) {
-      projectRooms.get(leaveProjectId).delete(socket.id)
-      socket.to(`project:${leaveProjectId}`).emit("user-left", userId)
-    }
-
-    const user = activeUsers.get(socket.id)
-    if (user) {
-      user.currentProject = null
-    }
-  })
-
-  // Handle chat messages
-  socket.on("message", (messageData) => {
-    const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
-
-    const message = {
-      ...messageData,
-      timestamp: new Date(),
-      socketId: socket.id,
-    }
-
-    // Broadcast to project room
-    socket.to(`project:${user.currentProject}`).emit("message", message)
-
-    console.log(`💬 Message from ${username} in project ${user.currentProject}: ${messageData.message}`)
-  })
-
-  // Handle typing indicators
-  socket.on("typing", ({ isTyping }) => {
-    const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
-
-    const typingKey = `${user.currentProject}:${userId}`
-
-    if (isTyping) {
-      typingUsers.set(typingKey, {
-        userId,
-        username,
-        projectId: user.currentProject,
-        startedAt: new Date(),
+      // Notify other users in the project
+      socket.to(`project_${projectId}`).emit("user_joined_project", {
+        userId: user.id,
+        username: user.username,
+        projectId,
       })
-    } else {
-      typingUsers.delete(typingKey)
-    }
 
-    // Broadcast typing status to project room
-    socket.to(`project:${user.currentProject}`).emit("typing", {
-      userId,
-      username,
-      isTyping,
-    })
-  })
-
-  // Handle cursor updates
-  socket.on("cursor-update", ({ cursor }) => {
-    const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
-
-    socket.to(`project:${user.currentProject}`).emit("cursor-update", {
-      userId,
-      username,
-      cursor,
-      timestamp: new Date(),
-    })
-  })
-
-  // Handle code changes
-  socket.on("code-change", ({ changes }) => {
-    const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
-
-    socket.to(`project:${user.currentProject}`).emit("code-change", {
-      userId,
-      username,
-      changes,
-      timestamp: new Date(),
-    })
-  })
-
-  // Handle selection updates
-  socket.on("selection-update", ({ selection }) => {
-    const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
-
-    socket.to(`project:${user.currentProject}`).emit("selection-update", {
-      userId,
-      username,
-      selection,
-      timestamp: new Date(),
-    })
-  })
-
-  // Handle presence updates
-  socket.on("presence-update", ({ status, metadata }) => {
-    const user = activeUsers.get(socket.id)
-    if (!user) return
-
-    user.status = status
-    user.metadata = metadata
-    user.lastSeen = new Date()
-
-    if (user.currentProject) {
-      const projectUsers = Array.from(projectRooms.get(user.currentProject))
+      // Send current project members
+      const projectMembers = Array.from(projectRooms.get(projectId))
         .map((socketId) => activeUsers.get(socketId))
         .filter(Boolean)
 
-      io.to(`project:${user.currentProject}`).emit("presence-update", projectUsers)
+      socket.emit("project_members", projectMembers)
     }
   })
 
-  // Handle current file updates
-  socket.on("current-file", ({ filename }) => {
+  // Handle leaving project rooms
+  socket.on("leave_project", (projectId) => {
+    socket.leave(`project_${projectId}`)
+
+    if (projectRooms.has(projectId)) {
+      projectRooms.get(projectId).delete(socket.id)
+      if (projectRooms.get(projectId).size === 0) {
+        projectRooms.delete(projectId)
+      }
+    }
+
     const user = activeUsers.get(socket.id)
-    if (!user) return
+    if (user) {
+      console.log(`👋 ${user.username} left project: ${projectId}`)
+      socket.to(`project_${projectId}`).emit("user_left_project", {
+        userId: user.id,
+        username: user.username,
+        projectId,
+      })
+    }
+  })
 
-    user.currentFile = filename
-    user.lastActivity = new Date()
+  // Handle real-time code changes
+  socket.on("code_change", (data) => {
+    const { projectId, fileId, content, cursor, selection } = data
+    const user = activeUsers.get(socket.id)
 
-    if (user.currentProject) {
-      socket.to(`project:${user.currentProject}`).emit("file-change", {
-        userId,
-        username,
-        filename,
+    if (user) {
+      socket.to(`project_${projectId}`).emit("code_update", {
+        fileId,
+        content,
+        cursor,
+        selection,
+        userId: user.id,
+        username: user.username,
         timestamp: new Date(),
       })
     }
   })
 
-  // Handle file sharing
-  socket.on("file-share", (fileData) => {
+  // Handle cursor movements
+  socket.on("cursor_move", (data) => {
+    const { projectId, fileId, cursor, selection } = data
     const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
 
-    const message = {
-      id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      userId,
-      username,
-      type: "file",
-      message: `Shared a file: ${fileData.name}`,
-      metadata: {
-        filename: fileData.name,
-        size: fileData.size,
-        type: fileData.type,
-        url: fileData.url || "#",
-      },
-      timestamp: new Date(),
+    if (user) {
+      socket.to(`project_${projectId}`).emit("cursor_update", {
+        fileId,
+        cursor,
+        selection,
+        userId: user.id,
+        username: user.username,
+        color: getUserColor(user.id),
+      })
     }
+  })
 
-    io.to(`project:${user.currentProject}`).emit("message", message)
+  // Handle typing indicators
+  socket.on("typing_start", (data) => {
+    const { projectId, fileId } = data
+    const user = activeUsers.get(socket.id)
+
+    if (user) {
+      const typingKey = `${projectId}_${fileId}`
+      if (!typingUsers.has(typingKey)) {
+        typingUsers.set(typingKey, new Set())
+      }
+      typingUsers.get(typingKey).add(user.id)
+
+      socket.to(`project_${projectId}`).emit("user_typing", {
+        fileId,
+        userId: user.id,
+        username: user.username,
+        isTyping: true,
+      })
+    }
+  })
+
+  socket.on("typing_stop", (data) => {
+    const { projectId, fileId } = data
+    const user = activeUsers.get(socket.id)
+
+    if (user) {
+      const typingKey = `${projectId}_${fileId}`
+      if (typingUsers.has(typingKey)) {
+        typingUsers.get(typingKey).delete(user.id)
+        if (typingUsers.get(typingKey).size === 0) {
+          typingUsers.delete(typingKey)
+        }
+      }
+
+      socket.to(`project_${projectId}`).emit("user_typing", {
+        fileId,
+        userId: user.id,
+        username: user.username,
+        isTyping: false,
+      })
+    }
+  })
+
+  // Handle chat messages
+  socket.on("send_message", (data) => {
+    const { projectId, roomId, content, type = "text" } = data
+    const user = activeUsers.get(socket.id)
+
+    if (user) {
+      const message = {
+        id: generateId(),
+        content,
+        type,
+        userId: user.id,
+        username: user.username,
+        avatar: user.avatar_url,
+        timestamp: new Date(),
+        roomId,
+      }
+
+      // Broadcast to project room
+      io.to(`project_${projectId}`).emit("new_message", message)
+
+      console.log(`💬 Message from ${user.username} in project ${projectId}: ${content.substring(0, 50)}...`)
+    }
+  })
+
+  // Handle file operations
+  socket.on("file_created", (data) => {
+    const { projectId, file } = data
+    const user = activeUsers.get(socket.id)
+
+    if (user) {
+      socket.to(`project_${projectId}`).emit("file_added", {
+        file,
+        createdBy: user.username,
+        timestamp: new Date(),
+      })
+    }
+  })
+
+  socket.on("file_deleted", (data) => {
+    const { projectId, fileId, fileName } = data
+    const user = activeUsers.get(socket.id)
+
+    if (user) {
+      socket.to(`project_${projectId}`).emit("file_removed", {
+        fileId,
+        fileName,
+        deletedBy: user.username,
+        timestamp: new Date(),
+      })
+    }
+  })
+
+  socket.on("file_renamed", (data) => {
+    const { projectId, fileId, oldName, newName } = data
+    const user = activeUsers.get(socket.id)
+
+    if (user) {
+      socket.to(`project_${projectId}`).emit("file_renamed", {
+        fileId,
+        oldName,
+        newName,
+        renamedBy: user.username,
+        timestamp: new Date(),
+      })
+    }
+  })
+
+  // Handle video call signaling
+  socket.on("call_start", (data) => {
+    const { projectId, roomName } = data
+    const user = activeUsers.get(socket.id)
+
+    if (user) {
+      socket.to(`project_${projectId}`).emit("call_started", {
+        roomName,
+        startedBy: user.username,
+        timestamp: new Date(),
+      })
+    }
+  })
+
+  socket.on("call_join", (data) => {
+    const { projectId, roomName } = data
+    const user = activeUsers.get(socket.id)
+
+    if (user) {
+      socket.to(`project_${projectId}`).emit("user_joined_call", {
+        roomName,
+        username: user.username,
+        timestamp: new Date(),
+      })
+    }
+  })
+
+  socket.on("call_leave", (data) => {
+    const { projectId, roomName } = data
+    const user = activeUsers.get(socket.id)
+
+    if (user) {
+      socket.to(`project_${projectId}`).emit("user_left_call", {
+        roomName,
+        username: user.username,
+        timestamp: new Date(),
+      })
+    }
   })
 
   // Handle screen sharing
-  socket.on("screen-share-start", () => {
+  socket.on("screen_share_start", (data) => {
+    const { projectId } = data
     const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
 
-    socket.to(`project:${user.currentProject}`).emit("screen-share-started", {
-      userId,
-      username,
-      timestamp: new Date(),
-    })
+    if (user) {
+      socket.to(`project_${projectId}`).emit("screen_share_started", {
+        userId: user.id,
+        username: user.username,
+        timestamp: new Date(),
+      })
+    }
   })
 
-  socket.on("screen-share-stop", () => {
+  socket.on("screen_share_stop", (data) => {
+    const { projectId } = data
     const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
 
-    socket.to(`project:${user.currentProject}`).emit("screen-share-stopped", {
-      userId,
-      username,
-      timestamp: new Date(),
-    })
+    if (user) {
+      socket.to(`project_${projectId}`).emit("screen_share_stopped", {
+        userId: user.id,
+        username: user.username,
+        timestamp: new Date(),
+      })
+    }
   })
 
-  // Handle voice chat
-  socket.on("voice-chat-start", () => {
+  // Handle user status updates
+  socket.on("status_update", (status) => {
     const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
+    if (user) {
+      user.status = status
+      user.lastSeen = new Date()
 
-    socket.to(`project:${user.currentProject}`).emit("voice-chat-started", {
-      userId,
-      username,
-      timestamp: new Date(),
-    })
-  })
-
-  socket.on("voice-chat-stop", () => {
-    const user = activeUsers.get(socket.id)
-    if (!user || !user.currentProject) return
-
-    socket.to(`project:${user.currentProject}`).emit("voice-chat-stopped", {
-      userId,
-      username,
-      timestamp: new Date(),
-    })
+      // Broadcast status update
+      socket.broadcast.emit("user_status_update", {
+        userId: user.id,
+        username: user.username,
+        status,
+        lastSeen: user.lastSeen,
+      })
+    }
   })
 
   // Handle disconnection
   socket.on("disconnect", (reason) => {
     const user = activeUsers.get(socket.id)
-    if (!user) return
 
-    console.log(`❌ User disconnected: ${user.username} (${reason})`)
+    if (user) {
+      console.log(`❌ User disconnected: ${user.username} (${socket.id}) - Reason: ${reason}`)
 
-    // Remove from project room
-    if (user.currentProject && projectRooms.has(user.currentProject)) {
-      projectRooms.get(user.currentProject).delete(socket.id)
-      socket.to(`project:${user.currentProject}`).emit("user-left", user.userId)
+      // Remove from all project rooms
+      projectRooms.forEach((members, projectId) => {
+        if (members.has(socket.id)) {
+          members.delete(socket.id)
+          socket.to(`project_${projectId}`).emit("user_left_project", {
+            userId: user.id,
+            username: user.username,
+            projectId,
+          })
 
-      // Update presence for remaining users
-      const projectUsers = Array.from(projectRooms.get(user.currentProject))
-        .map((socketId) => activeUsers.get(socketId))
-        .filter(Boolean)
+          if (members.size === 0) {
+            projectRooms.delete(projectId)
+          }
+        }
+      })
 
-      socket.to(`project:${user.currentProject}`).emit("presence-update", projectUsers)
+      // Remove from typing indicators
+      typingUsers.forEach((users, key) => {
+        users.delete(user.id)
+        if (users.size === 0) {
+          typingUsers.delete(key)
+        }
+      })
+
+      // Broadcast user offline status
+      socket.broadcast.emit("user_offline", {
+        userId: user.id,
+        username: user.username,
+        lastSeen: new Date(),
+      })
+
+      activeUsers.delete(socket.id)
+    } else {
+      console.log(`❌ Unknown user disconnected: ${socket.id}`)
     }
-
-    // Clean up typing indicators
-    for (const [key, typingUser] of typingUsers.entries()) {
-      if (typingUser.userId === user.userId) {
-        typingUsers.delete(key)
-      }
-    }
-
-    // Remove user
-    activeUsers.delete(socket.id)
   })
 
-  // Send welcome message
-  socket.emit("connection-established", {
-    message: "Connected to CollabCode WebSocket server",
-    userId,
-    username,
-    timestamp: new Date(),
+  // Handle ping/pong for connection health
+  socket.on("ping", () => {
+    socket.emit("pong")
   })
 })
 
-// Clean up inactive typing indicators every 10 seconds
+// Utility functions
+function generateId() {
+  return Math.random().toString(36).substring(2) + Date.now().toString(36)
+}
+
+function getUserColor(userId) {
+  const colors = [
+    "#FF6B6B",
+    "#4ECDC4",
+    "#45B7D1",
+    "#96CEB4",
+    "#FFEAA7",
+    "#DDA0DD",
+    "#98D8C8",
+    "#F7DC6F",
+    "#BB8FCE",
+    "#85C1E9",
+  ]
+  const hash = userId.split("").reduce((a, b) => {
+    a = (a << 5) - a + b.charCodeAt(0)
+    return a & a
+  }, 0)
+  return colors[Math.abs(hash) % colors.length]
+}
+
+// Periodic cleanup of inactive connections
 setInterval(() => {
   const now = new Date()
-  for (const [key, typingUser] of typingUsers.entries()) {
-    if (now.getTime() - typingUser.startedAt.getTime() > 10000) {
-      typingUsers.delete(key)
+  const timeout = 5 * 60 * 1000 // 5 minutes
 
-      // Notify project room that user stopped typing
-      io.to(`project:${typingUser.projectId}`).emit("typing", {
-        userId: typingUser.userId,
-        username: typingUser.username,
-        isTyping: false,
-      })
+  activeUsers.forEach((user, socketId) => {
+    if (now - user.lastSeen > timeout) {
+      console.log(`🧹 Cleaning up inactive user: ${user.username}`)
+      activeUsers.delete(socketId)
     }
-  }
-}, 10000)
+  })
+}, 60000) // Check every minute
 
-// Server status endpoint
-httpServer.on("request", (req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" })
-    res.end(
-      JSON.stringify({
-        status: "healthy",
-        activeUsers: activeUsers.size,
-        activeProjects: projectRooms.size,
-        uptime: process.uptime(),
-        timestamp: new Date(),
-      }),
-    )
-  } else {
-    res.writeHead(404)
-    res.end("Not Found")
-  }
-})
-
+// Start the server
 const PORT = process.env.WEBSOCKET_PORT || 3001
-
 httpServer.listen(PORT, () => {
-  console.log(`🚀 WebSocket server running on port ${PORT}`)
-  console.log(`📊 Health check available at http://localhost:${PORT}/health`)
-  console.log(`🔗 WebSocket endpoint: ws://localhost:${PORT}`)
+  console.log(`🚀 CollabCode WebSocket Server running on port ${PORT}`)
+  console.log(`📡 CORS enabled for: ${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}`)
+  console.log("✅ Ready for real-time collaboration!")
 })
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
-  console.log("🛑 Shutting down WebSocket server...")
+  console.log("🛑 Received SIGTERM, shutting down gracefully...")
   httpServer.close(() => {
     console.log("✅ WebSocket server closed")
     process.exit(0)
@@ -395,7 +425,7 @@ process.on("SIGTERM", () => {
 })
 
 process.on("SIGINT", () => {
-  console.log("🛑 Shutting down WebSocket server...")
+  console.log("🛑 Received SIGINT, shutting down gracefully...")
   httpServer.close(() => {
     console.log("✅ WebSocket server closed")
     process.exit(0)

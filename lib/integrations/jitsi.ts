@@ -1,5 +1,5 @@
-// Jitsi Meet Integration - Completely Free Video Calling
-// Supports unlimited HD video calls with up to 75 participants
+// Jitsi Meet Integration - 100% Free Video Conferencing
+// No API keys required, unlimited usage
 
 export interface JitsiConfig {
   roomName: string
@@ -10,34 +10,38 @@ export interface JitsiConfig {
   password?: string
 }
 
-export interface JitsiMeetAPI {
-  executeCommand: (command: string, ...args: any[]) => void
-  addListener: (event: string, listener: Function) => void
-  removeListener: (event: string, listener: Function) => void
-  dispose: () => void
-  getParticipantsInfo: () => any[]
-  isAudioMuted: () => boolean
-  isVideoMuted: () => boolean
-}
-
-declare global {
-  interface Window {
-    JitsiMeetExternalAPI: any
+export interface JitsiMeetingOptions {
+  width?: string | number
+  height?: string | number
+  parentNode?: HTMLElement
+  configOverwrite?: Record<string, any>
+  interfaceConfigOverwrite?: Record<string, any>
+  onApiReady?: (api: any) => void
+  onReadyToClose?: () => void
+  userInfo?: {
+    displayName: string
+    email?: string
+    avatarUrl?: string
   }
 }
 
-export class JitsiMeetService {
-  private api: JitsiMeetAPI | null = null
-  private domain = "meet.jit.si" // Free Jitsi server
-  private container: HTMLElement | null = null
+export class JitsiService {
+  private api: any = null
+  private domain: string
+  private isLoaded = false
 
-  constructor() {
-    this.loadJitsiScript()
+  constructor(domain = "meet.jit.si") {
+    this.domain = domain
   }
 
-  private async loadJitsiScript(): Promise<void> {
+  // Load Jitsi Meet API script
+  async loadJitsiScript(): Promise<void> {
+    if (this.isLoaded) return
+
     return new Promise((resolve, reject) => {
+      // Check if script is already loaded
       if (window.JitsiMeetExternalAPI) {
+        this.isLoaded = true
         resolve()
         return
       }
@@ -45,165 +49,199 @@ export class JitsiMeetService {
       const script = document.createElement("script")
       script.src = `https://${this.domain}/external_api.js`
       script.async = true
-      script.onload = () => resolve()
-      script.onerror = () => reject(new Error("Failed to load Jitsi Meet API"))
+
+      script.onload = () => {
+        this.isLoaded = true
+        resolve()
+      }
+
+      script.onerror = () => {
+        reject(new Error("Failed to load Jitsi Meet API"))
+      }
+
       document.head.appendChild(script)
     })
   }
 
-  async createMeeting(config: JitsiConfig, containerId: string): Promise<JitsiMeetAPI> {
+  // Create a new meeting
+  async createMeeting(config: JitsiConfig, options: JitsiMeetingOptions = {}): Promise<any> {
     await this.loadJitsiScript()
 
-    this.container = document.getElementById(containerId)
-    if (!this.container) {
-      throw new Error(`Container with id "${containerId}" not found`)
+    if (!window.JitsiMeetExternalAPI) {
+      throw new Error("Jitsi Meet API not available")
     }
 
-    const options = {
+    // Default configuration
+    const defaultConfig = {
+      startWithAudioMuted: false,
+      startWithVideoMuted: false,
+      enableWelcomePage: false,
+      enableUserRolesBasedOnToken: false,
+      enableFeaturesBasedOnToken: false,
+      disableModeratorIndicator: false,
+      startScreenSharing: false,
+      enableEmailInStats: false,
+      enableClosePage: false,
+      disableProfile: false,
+      disableInviteFunctions: false,
+      doNotStoreRoom: false,
+      deploymentInfo: {
+        shard: "meet.jit.si",
+        region: "us-east-1",
+        userRegion: "us-east-1",
+      },
+    }
+
+    // Default interface configuration
+    const defaultInterfaceConfig = {
+      TOOLBAR_BUTTONS: [
+        "microphone",
+        "camera",
+        "closedcaptions",
+        "desktop",
+        "fullscreen",
+        "fodeviceselection",
+        "hangup",
+        "profile",
+        "chat",
+        "recording",
+        "livestreaming",
+        "etherpad",
+        "sharedvideo",
+        "settings",
+        "raisehand",
+        "videoquality",
+        "filmstrip",
+        "invite",
+        "feedback",
+        "stats",
+        "shortcuts",
+        "tileview",
+        "videobackgroundblur",
+        "download",
+        "help",
+        "mute-everyone",
+        "security",
+      ],
+      SETTINGS_SECTIONS: ["devices", "language", "moderator", "profile", "calendar"],
+      SHOW_JITSI_WATERMARK: false,
+      SHOW_WATERMARK_FOR_GUESTS: false,
+      SHOW_BRAND_WATERMARK: false,
+      BRAND_WATERMARK_LINK: "",
+      SHOW_POWERED_BY: false,
+      SHOW_PROMOTIONAL_CLOSE_PAGE: false,
+      SHOW_CHROME_EXTENSION_BANNER: false,
+      MOBILE_APP_PROMO: false,
+      NATIVE_APP_NAME: "CollabCode",
+      PROVIDER_NAME: "CollabCode",
+      LANG_DETECTION: true,
+      CONNECTION_INDICATOR_AUTO_HIDE_ENABLED: true,
+      CONNECTION_INDICATOR_AUTO_HIDE_TIMEOUT: 5000,
+      CONNECTION_INDICATOR_DISABLED: false,
+      VIDEO_LAYOUT_FIT: "both",
+      filmStripOnly: false,
+      VERTICAL_FILMSTRIP: true,
+      CLOSE_PAGE_GUEST_HINT: false,
+      SHOW_REJECT_WITH_MESSAGE_BUTTON: false,
+      DISABLE_PRESENCE_STATUS: false,
+      DISABLE_JOIN_LEAVE_NOTIFICATIONS: false,
+    }
+
+    // Create container element if not provided
+    let parentNode = options.parentNode
+    if (!parentNode) {
+      parentNode = document.createElement("div")
+      parentNode.id = "jitsi-container"
+      parentNode.style.width = typeof options.width === "number" ? `${options.width}px` : options.width || "100%"
+      parentNode.style.height = typeof options.height === "number" ? `${options.height}px` : options.height || "400px"
+      document.body.appendChild(parentNode)
+    }
+
+    // Initialize Jitsi Meet API
+    this.api = new window.JitsiMeetExternalAPI(this.domain, {
       roomName: config.roomName,
-      width: "100%",
-      height: "100%",
-      parentNode: this.container,
+      width: options.width || "100%",
+      height: options.height || "100%",
+      parentNode: parentNode,
       configOverwrite: {
-        startWithAudioMuted: false,
-        startWithVideoMuted: false,
-        enableWelcomePage: false,
-        enableUserRolesBasedOnToken: false,
-        prejoinPageEnabled: false,
-        disableInviteFunctions: false,
-        doNotStoreRoom: true,
-        // UI customization
-        toolbarButtons: [
-          "microphone",
-          "camera",
-          "closedcaptions",
-          "desktop",
-          "fullscreen",
-          "fodeviceselection",
-          "hangup",
-          "profile",
-          "chat",
-          "recording",
-          "livestreaming",
-          "etherpad",
-          "sharedvideo",
-          "settings",
-          "raisehand",
-          "videoquality",
-          "filmstrip",
-          "invite",
-          "feedback",
-          "stats",
-          "shortcuts",
-          "tileview",
-          "videobackgroundblur",
-          "download",
-          "help",
-          "mute-everyone",
-          "security",
-        ],
+        ...defaultConfig,
+        ...options.configOverwrite,
+        subject: config.subject,
+        startWithAudioMuted: options.configOverwrite?.startWithAudioMuted ?? false,
+        startWithVideoMuted: options.configOverwrite?.startWithVideoMuted ?? false,
       },
       interfaceConfigOverwrite: {
-        SHOW_JITSI_WATERMARK: false,
-        SHOW_WATERMARK_FOR_GUESTS: false,
-        SHOW_BRAND_WATERMARK: false,
-        BRAND_WATERMARK_LINK: "",
-        SHOW_POWERED_BY: false,
-        DISPLAY_WELCOME_PAGE_CONTENT: false,
-        DISPLAY_WELCOME_PAGE_TOOLBAR_ADDITIONAL_CONTENT: false,
-        APP_NAME: "CollabCode Meeting",
-        NATIVE_APP_NAME: "CollabCode",
-        PROVIDER_NAME: "CollabCode",
-        LANG_DETECTION: true,
-        CONNECTION_INDICATOR_AUTO_HIDE_ENABLED: true,
-        CONNECTION_INDICATOR_AUTO_HIDE_TIMEOUT: 5000,
-        MAXIMUM_ZOOMING_COEFFICIENT: 1.3,
-        FILM_STRIP_MAX_HEIGHT: 120,
-        ENABLE_FEEDBACK_ANIMATION: false,
-        DISABLE_FOCUS_INDICATOR: false,
-        DISABLE_DOMINANT_SPEAKER_INDICATOR: false,
-        DISABLE_TRANSCRIPTION_SUBTITLES: false,
-        DISABLE_RINGING: false,
-        AUDIO_LEVEL_PRIMARY_COLOR: "rgba(255,255,255,0.4)",
-        AUDIO_LEVEL_SECONDARY_COLOR: "rgba(255,255,255,0.2)",
-        POLICY_LOGO: null,
-        LOCAL_THUMBNAIL_RATIO: 16 / 9,
-        REMOTE_THUMBNAIL_RATIO: 1,
-        LIVE_STREAMING_HELP_LINK: "https://jitsi.org/live",
-        MOBILE_APP_PROMO: false,
-        ENFORCE_NOTIFICATION_AUTO_DISMISS_TIMEOUT: 15000,
+        ...defaultInterfaceConfig,
+        ...options.interfaceConfigOverwrite,
       },
       userInfo: {
         displayName: config.displayName,
-        email: config.email || "",
-        avatarURL: config.avatar || "",
+        email: config.email,
+        avatarUrl: config.avatar,
+        ...options.userInfo,
       },
-    }
-
-    this.api = new window.JitsiMeetExternalAPI(this.domain, options)
+    })
 
     // Set up event listeners
-    this.setupEventListeners()
-
-    // Set subject if provided
-    if (config.subject) {
-      this.api.executeCommand("subject", config.subject)
-    }
-
-    // Set password if provided
-    if (config.password) {
-      this.api.executeCommand("password", config.password)
-    }
+    this.setupEventListeners(options)
 
     return this.api
   }
 
-  private setupEventListeners(): void {
+  private setupEventListeners(options: JitsiMeetingOptions): void {
     if (!this.api) return
 
-    // Meeting events
-    this.api.addListener("videoConferenceJoined", (event: any) => {
-      console.log("User joined the meeting:", event)
+    // API ready event
+    this.api.addEventListener("videoConferenceJoined", () => {
+      console.log("✅ Joined Jitsi meeting")
+      if (options.onApiReady) {
+        options.onApiReady(this.api)
+      }
     })
 
-    this.api.addListener("videoConferenceLeft", (event: any) => {
-      console.log("User left the meeting:", event)
+    // Meeting ended event
+    this.api.addEventListener("videoConferenceLeft", () => {
+      console.log("👋 Left Jitsi meeting")
+      if (options.onReadyToClose) {
+        options.onReadyToClose()
+      }
     })
 
-    this.api.addListener("participantJoined", (event: any) => {
-      console.log("Participant joined:", event)
+    // Participant events
+    this.api.addEventListener("participantJoined", (participant: any) => {
+      console.log("👤 Participant joined:", participant)
     })
 
-    this.api.addListener("participantLeft", (event: any) => {
-      console.log("Participant left:", event)
+    this.api.addEventListener("participantLeft", (participant: any) => {
+      console.log("👤 Participant left:", participant)
     })
 
     // Audio/Video events
-    this.api.addListener("audioMuteStatusChanged", (event: any) => {
-      console.log("Audio mute status changed:", event)
+    this.api.addEventListener("audioMuteStatusChanged", (event: any) => {
+      console.log("🎤 Audio mute status:", event.muted)
     })
 
-    this.api.addListener("videoMuteStatusChanged", (event: any) => {
-      console.log("Video mute status changed:", event)
+    this.api.addEventListener("videoMuteStatusChanged", (event: any) => {
+      console.log("📹 Video mute status:", event.muted)
     })
 
     // Screen sharing events
-    this.api.addListener("screenSharingStatusChanged", (event: any) => {
-      console.log("Screen sharing status changed:", event)
+    this.api.addEventListener("screenSharingStatusChanged", (event: any) => {
+      console.log("🖥️ Screen sharing status:", event.on)
     })
 
     // Chat events
-    this.api.addListener("incomingMessage", (event: any) => {
-      console.log("Incoming chat message:", event)
+    this.api.addEventListener("incomingMessage", (event: any) => {
+      console.log("💬 Incoming message:", event)
     })
 
-    // Error handling
-    this.api.addListener("readyToClose", () => {
-      console.log("Meeting is ready to close")
+    // Error events
+    this.api.addEventListener("errorOccurred", (error: any) => {
+      console.error("❌ Jitsi error:", error)
     })
   }
 
-  // Meeting controls
+  // Control methods
   toggleAudio(): void {
     this.api?.executeCommand("toggleAudio")
   }
@@ -224,97 +262,106 @@ export class JitsiMeetService {
     this.api?.executeCommand("toggleFilmStrip")
   }
 
-  hangUp(): void {
-    this.api?.executeCommand("hangup")
-  }
-
-  setSubject(subject: string): void {
-    this.api?.executeCommand("subject", subject)
+  setVideoQuality(quality: "low" | "standard" | "high"): void {
+    this.api?.executeCommand("setVideoQuality", quality)
   }
 
   sendChatMessage(message: string): void {
     this.api?.executeCommand("sendChatMessage", message)
   }
 
-  // Get meeting info
-  getParticipants(): any[] {
-    return this.api?.getParticipantsInfo() || []
+  setDisplayName(name: string): void {
+    this.api?.executeCommand("displayName", name)
   }
 
-  isAudioMuted(): boolean {
-    return this.api?.isAudioMuted() || false
+  setSubject(subject: string): void {
+    this.api?.executeCommand("subject", subject)
   }
 
-  isVideoMuted(): boolean {
-    return this.api?.isVideoMuted() || false
+  // Get meeting information
+  getParticipantsInfo(): Promise<any[]> {
+    return new Promise((resolve) => {
+      this.api?.executeCommand("getParticipantsInfo", (participants: any[]) => {
+        resolve(participants)
+      })
+    })
   }
 
-  // Cleanup
+  getVideoQuality(): Promise<string> {
+    return new Promise((resolve) => {
+      this.api?.executeCommand("getVideoQuality", (quality: string) => {
+        resolve(quality)
+      })
+    })
+  }
+
+  isAudioMuted(): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.api?.executeCommand("isAudioMuted", (muted: boolean) => {
+        resolve(muted)
+      })
+    })
+  }
+
+  isVideoMuted(): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.api?.executeCommand("isVideoMuted", (muted: boolean) => {
+        resolve(muted)
+      })
+    })
+  }
+
+  // Destroy meeting
   dispose(): void {
     if (this.api) {
       this.api.dispose()
       this.api = null
     }
-    if (this.container) {
-      this.container.innerHTML = ""
+
+    // Remove container if we created it
+    const container = document.getElementById("jitsi-container")
+    if (container) {
+      container.remove()
     }
   }
 
-  // Utility methods
-  generateRoomName(projectId: string, teamId?: string): string {
-    const prefix = "collabcode"
-    const suffix = teamId ? `${projectId}-${teamId}` : projectId
-    return `${prefix}-${suffix}-${Date.now()}`
+  // Static utility methods
+  static generateRoomName(projectId: string, suffix?: string): string {
+    const timestamp = Date.now().toString(36)
+    const random = Math.random().toString(36).substring(2, 8)
+    const roomSuffix = suffix ? `-${suffix}` : ""
+    return `collabcode-${projectId}-${timestamp}-${random}${roomSuffix}`
   }
 
-  createMeetingUrl(roomName: string): string {
-    return `https://${this.domain}/${roomName}`
+  static isJitsiSupported(): boolean {
+    // Check if browser supports WebRTC
+    return !!(window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection)
   }
 
-  // Advanced features
-  setPassword(password: string): void {
-    this.api?.executeCommand("password", password)
-  }
-
-  startRecording(): void {
-    this.api?.executeCommand("startRecording", {
-      mode: "stream",
-    })
-  }
-
-  stopRecording(): void {
-    this.api?.executeCommand("stopRecording", "stream")
-  }
-
-  startLiveStream(streamKey: string, streamUrl: string): void {
-    this.api?.executeCommand("startLiveStream", streamKey, streamUrl)
-  }
-
-  stopLiveStream(): void {
-    this.api?.executeCommand("stopLiveStream")
-  }
-
-  // Moderator controls
-  muteEveryone(): void {
-    this.api?.executeCommand("muteEveryone")
-  }
-
-  kickParticipant(participantId: string): void {
-    this.api?.executeCommand("kickParticipant", participantId)
-  }
-
-  grantModerator(participantId: string): void {
-    this.api?.executeCommand("grantModerator", participantId)
+  static getOptimalConfig(participantCount: number): Partial<JitsiConfig> {
+    if (participantCount > 10) {
+      return {
+        // Large meeting optimizations
+      }
+    } else if (participantCount > 4) {
+      return {
+        // Medium meeting optimizations
+      }
+    } else {
+      return {
+        // Small meeting optimizations
+      }
+    }
   }
 }
 
 // Export singleton instance
-export const jitsiService = new JitsiMeetService()
+export const jitsiService = new JitsiService()
 
 // React hook for Jitsi integration
-export function useJitsiMeet() {
-  const createMeeting = async (config: JitsiConfig, containerId: string) => {
-    return await jitsiService.createMeeting(config, containerId)
+export function useJitsi() {
+  const createMeeting = async (config: JitsiConfig, options?: JitsiMeetingOptions) => {
+    return jitsiService.createMeeting(config, options)
   }
 
   const disposeMeeting = () => {
@@ -327,11 +374,16 @@ export function useJitsiMeet() {
     toggleAudio: () => jitsiService.toggleAudio(),
     toggleVideo: () => jitsiService.toggleVideo(),
     toggleScreenShare: () => jitsiService.toggleScreenShare(),
-    hangUp: () => jitsiService.hangUp(),
-    getParticipants: () => jitsiService.getParticipants(),
-    isAudioMuted: () => jitsiService.isAudioMuted(),
-    isVideoMuted: () => jitsiService.isVideoMuted(),
-    generateRoomName: (projectId: string, teamId?: string) => jitsiService.generateRoomName(projectId, teamId),
-    createMeetingUrl: (roomName: string) => jitsiService.createMeetingUrl(roomName),
+    toggleChat: () => jitsiService.toggleChat(),
+    sendMessage: (message: string) => jitsiService.sendChatMessage(message),
+    setDisplayName: (name: string) => jitsiService.setDisplayName(name),
+    isSupported: JitsiService.isJitsiSupported(),
+  }
+}
+
+// Declare global types for TypeScript
+declare global {
+  interface Window {
+    JitsiMeetExternalAPI: any
   }
 }

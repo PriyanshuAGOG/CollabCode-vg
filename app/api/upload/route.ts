@@ -1,93 +1,102 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { handleFileUpload } from "@/lib/integrations/storage"
+import { storageService, handleFileUpload } from "@/lib/integrations/storage"
 import { verifyAuth } from "@/lib/auth"
 
 export async function POST(request: NextRequest) {
   try {
     // Verify authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success || !authResult.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const { user, error } = await verifyAuth(request)
+    if (!user) {
+      return NextResponse.json({ error: error || "Authentication required" }, { status: 401 })
     }
 
+    // Get form data
     const formData = await request.formData()
-    const projectId = formData.get("projectId") as string | undefined
+    const projectId = formData.get("projectId") as string
 
     // Handle file upload
-    const results = await handleFileUpload(formData, authResult.user.id, projectId)
+    const results = await handleFileUpload(formData, user.id, projectId)
 
     // Check if any uploads failed
-    const hasErrors = results.some((result) => !result.success)
-    const successCount = results.filter((result) => result.success).length
+    const failures = results.filter((r) => !r.success)
+    const successes = results.filter((r) => r.success)
+
+    if (failures.length > 0 && successes.length === 0) {
+      return NextResponse.json(
+        {
+          error: "All uploads failed",
+          details: failures.map((f) => f.error),
+        },
+        { status: 400 },
+      )
+    }
 
     return NextResponse.json({
-      success: !hasErrors || successCount > 0,
+      success: true,
       results,
-      message: hasErrors
-        ? `${successCount} of ${results.length} files uploaded successfully`
-        : `All ${results.length} files uploaded successfully`,
+      uploaded: successes.length,
+      failed: failures.length,
     })
   } catch (error) {
-    console.error("❌ Upload API error:", error)
+    console.error("Upload API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
-// Handle file downloads for local storage
 export async function GET(request: NextRequest) {
   try {
+    // Verify authentication
+    const { user, error } = await verifyAuth(request)
+    if (!user) {
+      return NextResponse.json({ error: error || "Authentication required" }, { status: 401 })
+    }
+
+    // Get query parameters
     const { searchParams } = new URL(request.url)
-    const filename = searchParams.get("filename")
+    const projectId = searchParams.get("projectId")
 
-    if (!filename) {
-      return NextResponse.json({ error: "Filename required" }, { status: 400 })
-    }
+    // List files
+    const files = await storageService.listFiles(projectId || undefined)
 
-    // Verify authentication for file access
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { storageService } = await import("@/lib/integrations/storage")
-    const fileBuffer = await storageService.getFile(filename)
-
-    if (!fileBuffer) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 })
-    }
-
-    // Determine content type
-    const contentType = getContentType(filename)
-
-    return new NextResponse(fileBuffer, {
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${filename}"`,
-      },
+    return NextResponse.json({
+      success: true,
+      files,
+      count: files.length,
     })
   } catch (error) {
-    console.error("❌ File download error:", error)
+    console.error("File list API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
-function getContentType(filename: string): string {
-  const ext = filename.split(".").pop()?.toLowerCase()
-  const contentTypes: Record<string, string> = {
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    gif: "image/gif",
-    webp: "image/webp",
-    svg: "image/svg+xml",
-    pdf: "application/pdf",
-    txt: "text/plain",
-    js: "text/javascript",
-    ts: "text/typescript",
-    json: "application/json",
-    css: "text/css",
-    html: "text/html",
-    md: "text/markdown",
+export async function DELETE(request: NextRequest) {
+  try {
+    // Verify authentication
+    const { user, error } = await verifyAuth(request)
+    if (!user) {
+      return NextResponse.json({ error: error || "Authentication required" }, { status: 401 })
+    }
+
+    // Get file identifier from request body
+    const { fileId } = await request.json()
+
+    if (!fileId) {
+      return NextResponse.json({ error: "File ID is required" }, { status: 400 })
+    }
+
+    // Delete file
+    const success = await storageService.deleteFile(fileId)
+
+    if (!success) {
+      return NextResponse.json({ error: "Failed to delete file" }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "File deleted successfully",
+    })
+  } catch (error) {
+    console.error("File delete API error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-  return contentTypes[ext || ""] || "application/octet-stream"
 }

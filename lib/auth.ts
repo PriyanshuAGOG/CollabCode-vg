@@ -1,166 +1,147 @@
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 import { connectToDatabase } from "./mongodb"
+import { getUserByEmail, createUser } from "./database/users"
 import type { User } from "./models/User"
-import { ObjectId } from "mongodb"
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
+const JWT_SECRET = process.env.JWT_SECRET || "your-fallback-secret-key-change-in-production"
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d"
 
-export interface AuthUser {
-  id: string
-  username: string
-  email: string
-  avatar_url?: string
-  status: string
+export interface AuthResult {
+  success: boolean
+  user?: User
+  token?: string
+  message?: string
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12)
+  const saltRounds = 12
+  return await bcrypt.hash(password, saltRounds)
 }
 
-export async function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
-  return bcrypt.compare(password, hashedPassword)
+export async function comparePassword(password: string, hashedPassword: string): Promise<boolean> {
+  return await bcrypt.compare(password, hashedPassword)
 }
 
-export function generateToken(user: AuthUser): string {
-  return jwt.sign(
-    {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-    },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN },
-  )
+export function generateToken(userId: string): string {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
 }
 
-export function verifyToken(token: string): AuthUser | null {
+export function verifyToken(token: string): { userId: string } | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any
-    return {
-      id: decoded.id,
-      username: decoded.username,
-      email: decoded.email,
-      avatar_url: decoded.avatar_url,
-      status: decoded.status || "offline",
-    }
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    return decoded
   } catch (error) {
     return null
   }
 }
 
-export async function createUser(username: string, email: string, password: string): Promise<User> {
-  const { db } = await connectToDatabase()
+export async function registerUser(email: string, username: string, password: string): Promise<AuthResult> {
+  try {
+    // Check if user already exists
+    const existingUser = await getUserByEmail(email)
+    if (existingUser) {
+      return { success: false, message: "User already exists with this email" }
+    }
 
-  // Check if user already exists
-  const existingUser = await db.collection("users").findOne({
-    $or: [{ email }, { username }],
-  })
+    // Hash password
+    const hashedPassword = await hashPassword(password)
 
-  if (existingUser) {
-    throw new Error("User already exists")
-  }
-
-  const hashedPassword = await hashPassword(password)
-  const now = new Date()
-
-  const user: User = {
-    username,
-    email,
-    password: hashedPassword,
-    avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-    status: "offline",
-    last_seen: now,
-    created_at: now,
-    updated_at: now,
-    preferences: {
-      theme: "dark",
-      notifications: true,
-      email_notifications: true,
-    },
-  }
-
-  const result = await db.collection("users").insertOne(user)
-  user._id = result.insertedId
-  user.id = result.insertedId.toString()
-
-  return user
-}
-
-export async function authenticateUser(email: string, password: string): Promise<AuthUser | null> {
-  const { db } = await connectToDatabase()
-
-  const user = await db.collection("users").findOne({ email })
-  if (!user) {
-    return null
-  }
-
-  const isValid = await verifyPassword(password, user.password)
-  if (!isValid) {
-    return null
-  }
-
-  // Update last seen
-  await db.collection("users").updateOne(
-    { _id: user._id },
-    {
-      $set: {
-        last_seen: new Date(),
-        status: "online",
-        updated_at: new Date(),
+    // Create user
+    const user = await createUser({
+      email,
+      username,
+      password: hashedPassword,
+      status: "online",
+      last_seen: new Date(),
+      created_at: new Date(),
+      updated_at: new Date(),
+      preferences: {
+        theme: "dark",
+        notifications: true,
+        email_notifications: true,
       },
-    },
-  )
+    })
 
-  return {
-    id: user._id.toString(),
-    username: user.username,
-    email: user.email,
-    avatar_url: user.avatar_url,
-    status: "online",
+    // Generate token
+    const token = generateToken(user.id!)
+
+    return {
+      success: true,
+      user: { ...user, password: undefined }, // Don't return password
+      token,
+      message: "User registered successfully",
+    }
+  } catch (error) {
+    console.error("Registration error:", error)
+    return { success: false, message: "Registration failed" }
   }
 }
 
-export async function getUserById(id: string): Promise<User | null> {
-  const { db } = await connectToDatabase()
+export async function loginUser(email: string, password: string): Promise<AuthResult> {
+  try {
+    // Get user by email
+    const user = await getUserByEmail(email)
+    if (!user) {
+      return { success: false, message: "Invalid email or password" }
+    }
 
-  const user = await db.collection("users").findOne({ _id: new ObjectId(id) })
-  if (!user) {
+    // Compare password
+    const isValidPassword = await comparePassword(password, user.password)
+    if (!isValidPassword) {
+      return { success: false, message: "Invalid email or password" }
+    }
+
+    // Generate token
+    const token = generateToken(user.id!)
+
+    return {
+      success: true,
+      user: { ...user, password: undefined }, // Don't return password
+      token,
+      message: "Login successful",
+    }
+  } catch (error) {
+    console.error("Login error:", error)
+    return { success: false, message: "Login failed" }
+  }
+}
+
+export async function verifyAuth(token: string): Promise<User | null> {
+  try {
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      return null
+    }
+
+    const { db } = await connectToDatabase()
+    const user = await db.collection("users").findOne({ _id: decoded.userId }, { projection: { password: 0 } })
+
+    if (!user) {
+      return null
+    }
+
+    return {
+      ...user,
+      id: user._id.toString(),
+    } as User
+  } catch (error) {
+    console.error("Auth verification error:", error)
     return null
   }
-
-  user.id = user._id.toString()
-  return user as User
 }
 
-export async function updateUserStatus(userId: string, status: "online" | "offline" | "away" | "busy"): Promise<void> {
-  const { db } = await connectToDatabase()
+export async function getCurrentUser(request: Request): Promise<User | null> {
+  try {
+    const authHeader = request.headers.get("authorization")
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return null
+    }
 
-  await db.collection("users").updateOne(
-    { _id: new ObjectId(userId) },
-    {
-      $set: {
-        status,
-        last_seen: new Date(),
-        updated_at: new Date(),
-      },
-    },
-  )
-}
-
-/**
- * Verify an incoming Bearer-token string (e.g. from the Authorization header)
- * and return the decoded AuthUser or null.
- *
- * Usage in a route handler:
- *   const authUser = verifyAuth(request.headers.get("authorization"))
- *   if (!authUser) return new Response("Unauthorized", { status: 401 })
- */
-export function verifyAuth(bearerToken?: string | null): AuthUser | null {
-  if (!bearerToken) return null
-
-  // Strip the "Bearer " prefix if present
-  const token = bearerToken.replace(/^Bearer\s+/i, "")
-  return verifyToken(token)
+    const token = authHeader.substring(7)
+    return await verifyAuth(token)
+  } catch (error) {
+    console.error("Get current user error:", error)
+    return null
+  }
 }
