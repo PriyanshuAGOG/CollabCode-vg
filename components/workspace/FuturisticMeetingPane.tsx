@@ -1,232 +1,399 @@
+
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Video, VideoOff, Mic, MicOff, Monitor, PhoneOff, Settings, Maximize2, Volume2, Zap } from "lucide-react"
+import { 
+  Video, 
+  VideoOff, 
+  Mic, 
+  MicOff, 
+  Phone, 
+  PhoneOff, 
+  Monitor, 
+  Settings, 
+  Users,
+  MessageSquare,
+  MoreVertical
+} from "lucide-react"
+import { startCall, joinCall, endCall } from "@/lib/supabase-client"
+import { useToast } from "@/hooks/use-toast"
 
-interface Participant {
-  id: string
-  name: string
-  avatar: string
-  isVideoOn: boolean
-  isAudioOn: boolean
-  isSpeaking: boolean
-  isScreenSharing: boolean
+interface MeetingPaneProps {
+  roomId: string
+  participants: Array<{
+    id: string
+    username: string
+    avatar_url?: string
+    status: string
+  }>
 }
 
-interface FuturisticMeetingPaneProps {
-  isActive: boolean
-  onEnd: () => void
-}
-
-export function FuturisticMeetingPane({ isActive, onEnd }: FuturisticMeetingPaneProps) {
-  const [isVideoOn, setIsVideoOn] = useState(true)
-  const [isAudioOn, setIsAudioOn] = useState(true)
+export function FuturisticMeetingPane({ roomId, participants }: MeetingPaneProps) {
+  const [isCallActive, setIsCallActive] = useState(false)
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true)
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true)
   const [isScreenSharing, setIsScreenSharing] = useState(false)
+  const [callType, setCallType] = useState<"voice" | "video">("video")
+  const [currentCall, setCurrentCall] = useState<any>(null)
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null)
+  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map())
+  
+  const localVideoRef = useRef<HTMLVideoElement>(null)
+  const remoteVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
+  const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map())
+  const { toast } = useToast()
 
-  const [participants] = useState<Participant[]>([
-    {
-      id: "1",
-      name: "You",
-      avatar: "YO",
-      isVideoOn: true,
-      isAudioOn: true,
-      isSpeaking: false,
-      isScreenSharing: false,
-    },
-    {
-      id: "2",
-      name: "Sarah Wilson",
-      avatar: "SW",
-      isVideoOn: true,
-      isAudioOn: true,
-      isSpeaking: true,
-      isScreenSharing: false,
-    },
-    {
-      id: "3",
-      name: "Mike Johnson",
-      avatar: "MJ",
-      isVideoOn: false,
-      isAudioOn: true,
-      isSpeaking: false,
-      isScreenSharing: false,
-    },
-  ])
+  useEffect(() => {
+    return () => {
+      // Cleanup on unmount
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop())
+      }
+      peerConnections.current.forEach(pc => pc.close())
+    }
+  }, [localStream])
 
-  if (!isActive) return null
+  const startVideoCall = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      })
+      
+      setLocalStream(stream)
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream
+      }
+      
+      const { data: call, error } = await startCall(roomId, "video")
+      if (error) throw error
+      
+      setCurrentCall(call)
+      setIsCallActive(true)
+      setCallType("video")
+      
+      toast({
+        title: "Video call started",
+        description: "Waiting for others to join...",
+      })
+    } catch (error) {
+      console.error("Error starting video call:", error)
+      toast({
+        title: "Error",
+        description: "Failed to start video call",
+        variant: "destructive",
+      })
+    }
+  }
 
-  return (
-    <div className="h-full flex flex-col relative overflow-hidden">
-      {/* Futuristic Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#0A0A0F] via-[#1A1A2E] to-[#16213E]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-green-500/10 via-transparent to-blue-500/10" />
+  const startVoiceCall = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false
+      })
+      
+      setLocalStream(stream)
+      
+      const { data: call, error } = await startCall(roomId, "voice")
+      if (error) throw error
+      
+      setCurrentCall(call)
+      setIsCallActive(true)
+      setCallType("voice")
+      
+      toast({
+        title: "Voice call started",
+        description: "Waiting for others to join...",
+      })
+    } catch (error) {
+      console.error("Error starting voice call:", error)
+      toast({
+        title: "Error",
+        description: "Failed to start voice call",
+        variant: "destructive",
+      })
+    }
+  }
 
-      {/* Meeting Header */}
-      <div className="relative p-4 border-b border-green-500/20 bg-black/40 backdrop-blur-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-10 h-10 bg-gradient-to-r from-green-400 via-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-2xl">
-                <Video className="w-5 h-5 text-white" />
-              </div>
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-black" />
+  const joinVideoCall = async (callId: string) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      })
+      
+      setLocalStream(stream)
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream
+      }
+      
+      const { data: call, error } = await joinCall(callId)
+      if (error) throw error
+      
+      setCurrentCall(call)
+      setIsCallActive(true)
+      setCallType("video")
+      
+      toast({
+        title: "Joined video call",
+        description: "Connected to the call",
+      })
+    } catch (error) {
+      console.error("Error joining video call:", error)
+      toast({
+        title: "Error",
+        description: "Failed to join video call",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const endVideoCall = async () => {
+    try {
+      if (currentCall) {
+        await endCall(currentCall.id)
+      }
+      
+      // Stop local stream
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop())
+        setLocalStream(null)
+      }
+      
+      // Close peer connections
+      peerConnections.current.forEach(pc => pc.close())
+      peerConnections.current.clear()
+      
+      setIsCallActive(false)
+      setCurrentCall(null)
+      setRemoteStreams(new Map())
+      
+      toast({
+        title: "Call ended",
+        description: "You left the call",
+      })
+    } catch (error) {
+      console.error("Error ending call:", error)
+      toast({
+        title: "Error",
+        description: "Failed to end call",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const toggleVideo = () => {
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0]
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled
+        setIsVideoEnabled(videoTrack.enabled)
+      }
+    }
+  }
+
+  const toggleAudio = () => {
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0]
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled
+        setIsAudioEnabled(audioTrack.enabled)
+      }
+    }
+  }
+
+  const toggleScreenShare = async () => {
+    if (!isScreenSharing) {
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true
+        })
+        setIsScreenSharing(true)
+        // Handle screen sharing logic here
+      } catch (error) {
+        console.error("Error sharing screen:", error)
+        toast({
+          title: "Error",
+          description: "Failed to share screen",
+          variant: "destructive",
+        })
+      }
+    } else {
+      setIsScreenSharing(false)
+      // Stop screen sharing
+    }
+  }
+
+  if (!isCallActive) {
+    return (
+      <Card className="h-full bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Video className="h-5 w-5" />
+            Meeting Room
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-center">
+            <div className="mb-4">
+              <Users className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Ready to connect?
+              </h3>
+              <p className="text-sm text-gray-500">
+                Start a call with your team members
+              </p>
             </div>
-            <div>
-              <h4 className="text-white font-bold text-sm bg-gradient-to-r from-green-400 to-blue-400 bg-clip-text text-transparent">
-                Hologram Session
-              </h4>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-xs text-green-300 font-medium">Live • {participants.length} connected</span>
-              </div>
+            
+            <div className="flex flex-col space-y-2">
+              <Button onClick={startVideoCall} className="w-full">
+                <Video className="h-4 w-4 mr-2" />
+                Start Video Call
+              </Button>
+              <Button onClick={startVoiceCall} variant="outline" className="w-full">
+                <Phone className="h-4 w-4 mr-2" />
+                Start Voice Call
+              </Button>
             </div>
           </div>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-cyan-400 hover:text-white hover:bg-cyan-500/20 transition-all duration-200"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Video Grid */}
-      <div className="flex-1 p-4 relative">
-        <div className="grid grid-cols-2 gap-3 h-full">
-          {participants.slice(0, 4).map((participant) => (
-            <div
-              key={participant.id}
-              className={`relative bg-black/30 rounded-2xl overflow-hidden border-2 backdrop-blur-sm transition-all duration-300 ${
-                participant.isSpeaking
-                  ? "border-green-400 shadow-lg shadow-green-400/20"
-                  : "border-cyan-500/20 hover:border-cyan-400/40"
-              }`}
-            >
-              {participant.isVideoOn ? (
-                <div className="w-full h-full bg-gradient-to-br from-blue-500/20 via-purple-600/20 to-cyan-500/20 flex items-center justify-center relative">
-                  <Avatar className="w-16 h-16 border-2 border-white/20">
-                    <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-lg font-bold">
-                      {participant.avatar}
-                    </AvatarFallback>
-                  </Avatar>
-                  {/* Holographic effect */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-transparent via-cyan-500/5 to-transparent animate-pulse" />
-                </div>
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-gray-800/50 to-gray-900/50 flex items-center justify-center">
-                  <Avatar className="w-20 h-20 border-2 border-gray-500/30">
-                    <AvatarFallback className="bg-gradient-to-r from-gray-600 to-gray-700 text-white text-xl font-bold">
-                      {participant.avatar}
-                    </AvatarFallback>
-                  </Avatar>
-                </div>
-              )}
-
-              {/* Participant Info */}
-              <div className="absolute bottom-3 left-3 right-3">
-                <div className="flex items-center justify-between">
-                  <Badge className="bg-black/60 text-white text-xs backdrop-blur-sm border border-cyan-500/30">
-                    {participant.name}
-                  </Badge>
-
-                  <div className="flex items-center gap-1">
-                    {!participant.isAudioOn && (
-                      <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center shadow-lg">
-                        <MicOff className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                    {!participant.isVideoOn && (
-                      <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center shadow-lg">
-                        <VideoOff className="w-3 h-3 text-white" />
-                      </div>
-                    )}
+          
+          <div className="border-t pt-4">
+            <h4 className="font-medium mb-2">Team Members</h4>
+            <div className="space-y-2">
+              {participants.map((participant) => (
+                <div key={participant.id} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={participant.avatar_url} />
+                      <AvatarFallback>
+                        {participant.username.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{participant.username}</span>
                   </div>
+                  <Badge 
+                    variant="outline" 
+                    className={`${
+                      participant.status === 'online' ? 'text-green-600 border-green-600' :
+                      participant.status === 'away' ? 'text-yellow-600 border-yellow-600' :
+                      participant.status === 'busy' ? 'text-red-600 border-red-600' :
+                      'text-gray-600 border-gray-600'
+                    }`}
+                  >
+                    {participant.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="h-full bg-black text-white">
+      <CardContent className="p-0 h-full flex flex-col">
+        {/* Video Grid */}
+        <div className="flex-1 relative">
+          {callType === "video" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-4 h-full">
+              {/* Local Video */}
+              <div className="relative bg-gray-900 rounded-lg overflow-hidden">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
+                  You {!isVideoEnabled && "(video off)"}
                 </div>
               </div>
-
-              {/* Speaking Indicator */}
-              {participant.isSpeaking && (
-                <div className="absolute top-3 right-3">
-                  <div className="w-8 h-8 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full flex items-center justify-center animate-pulse shadow-lg shadow-green-400/50">
-                    <Volume2 className="w-4 h-4 text-white" />
+              
+              {/* Remote Videos */}
+              {Array.from(remoteStreams.entries()).map(([participantId, stream]) => (
+                <div key={participantId} className="relative bg-gray-900 rounded-lg overflow-hidden">
+                  <video
+                    ref={(el) => {
+                      if (el) {
+                        remoteVideoRefs.current.set(participantId, el)
+                        el.srcObject = stream
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-1 rounded text-xs">
+                    Participant {participantId}
                   </div>
                 </div>
-              )}
-
-              {/* Neural activity indicator */}
-              <div className="absolute top-3 left-3">
-                <div className="w-6 h-6 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full flex items-center justify-center animate-spin shadow-lg">
-                  <Zap className="w-3 h-3 text-white" />
-                </div>
+              ))}
+            </div>
+          )}
+          
+          {callType === "voice" && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <Phone className="h-16 w-16 mx-auto mb-4 text-blue-500" />
+                <h3 className="text-xl font-semibold mb-2">Voice Call Active</h3>
+                <p className="text-gray-400">Audio only call in progress</p>
               </div>
             </div>
-          ))}
+          )}
         </div>
-      </div>
-
-      {/* Meeting Controls */}
-      <div className="relative p-4 border-t border-green-500/20 bg-black/40 backdrop-blur-xl">
-        <div className="flex items-center justify-center gap-3">
-          <Button
-            size="sm"
-            onClick={() => setIsAudioOn(!isAudioOn)}
-            className={`h-12 w-12 rounded-2xl transition-all duration-300 ${
-              isAudioOn
-                ? "bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-white shadow-lg"
-                : "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/25"
-            }`}
-          >
-            {isAudioOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={() => setIsVideoOn(!isVideoOn)}
-            className={`h-12 w-12 rounded-2xl transition-all duration-300 ${
-              isVideoOn
-                ? "bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-white shadow-lg"
-                : "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/25"
-            }`}
-          >
-            {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={() => setIsScreenSharing(!isScreenSharing)}
-            className={`h-12 w-12 rounded-2xl transition-all duration-300 ${
-              isScreenSharing
-                ? "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg shadow-blue-500/25"
-                : "bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-white shadow-lg"
-            }`}
-          >
-            <Monitor className="w-5 h-5" />
-          </Button>
-
-          <Button
-            size="sm"
-            className="h-12 w-12 rounded-2xl bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-white shadow-lg transition-all duration-300"
-          >
-            <Settings className="w-5 h-5" />
-          </Button>
-
-          <div className="w-px h-8 bg-gradient-to-b from-transparent via-cyan-500/50 to-transparent mx-2" />
-
-          <Button
-            size="sm"
-            onClick={onEnd}
-            className="h-12 px-6 rounded-2xl bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white shadow-lg shadow-red-500/25 transition-all duration-300"
-          >
-            <PhoneOff className="w-5 h-5 mr-2" />
-            End
-          </Button>
+        
+        {/* Call Controls */}
+        <div className="p-4 border-t border-gray-800">
+          <div className="flex items-center justify-center space-x-4">
+            <Button
+              variant={isAudioEnabled ? "default" : "destructive"}
+              size="sm"
+              onClick={toggleAudio}
+            >
+              {isAudioEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            </Button>
+            
+            {callType === "video" && (
+              <Button
+                variant={isVideoEnabled ? "default" : "destructive"}
+                size="sm"
+                onClick={toggleVideo}
+              >
+                {isVideoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+              </Button>
+            )}
+            
+            <Button
+              variant={isScreenSharing ? "destructive" : "outline"}
+              size="sm"
+              onClick={toggleScreenShare}
+            >
+              <Monitor className="h-4 w-4" />
+            </Button>
+            
+            <Button variant="outline" size="sm">
+              <MessageSquare className="h-4 w-4" />
+            </Button>
+            
+            <Button variant="outline" size="sm">
+              <Settings className="h-4 w-4" />
+            </Button>
+            
+            <Button variant="destructive" size="sm" onClick={endVideoCall}>
+              <PhoneOff className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 }
