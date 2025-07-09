@@ -2,7 +2,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverActions: true,
     allowedDevOrigins: [
       'https://tnmiaqoaqhjksrxbbugh.supabase.co',
       '*.replit.dev',
@@ -46,7 +45,6 @@ const nextConfig = {
   images: {
     domains: ['images.clerk.dev', 'img.clerk.com'],
   },
-  swcMinify: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },

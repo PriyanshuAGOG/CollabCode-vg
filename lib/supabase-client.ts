@@ -4,6 +4,12 @@ import { createClient } from "@supabase/supabase-js"
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://tnmiaqoaqhjksrxbbugh.supabase.co"
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubWlhcW9hcWhqa3NyeGJidWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwNjk2MjEsImV4cCI6MjA2NzY0NTYyMX0.fPBASjiI_NRM8kAzlxvFz39ouVhl3zmNPE3OGZzXTjM"
 
+// For development, log the environment variables (remove in production)
+if (process.env.NODE_ENV === 'development') {
+  console.log('Supabase URL:', supabaseUrl)
+  console.log('Supabase Key exists:', !!supabaseAnonKey)
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
