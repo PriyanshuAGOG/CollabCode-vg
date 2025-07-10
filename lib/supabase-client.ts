@@ -1,13 +1,10 @@
-
 import { createClient } from "@supabase/supabase-js"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://tnmiaqoaqhjksrxbbugh.supabase.co"
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubWlhcW9hcWhqa3NyeGJidWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwNjk2MjEsImV4cCI6MjA2NzY0NTYyMX0.fPBASjiI_NRM8kAzlxvFz39ouVhl3zmNPE3OGZzXTjM"
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// For development, log the environment variables (remove in production)
-if (process.env.NODE_ENV === 'development') {
-  console.log('Supabase URL:', supabaseUrl)
-  console.log('Supabase Key exists:', !!supabaseAnonKey)
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Missing Supabase environment variables")
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -69,31 +66,6 @@ export interface Message {
   created_at: string
   updated_at: string
   user?: Profile
-}
-
-export interface Project {
-  id: string
-  name: string
-  description?: string
-  framework?: string
-  repository_url?: string
-  team_id: string
-  owner_id: string
-  is_public: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface FileDocument {
-  id: string
-  name: string
-  path: string
-  content?: string
-  language?: string
-  project_id: string
-  created_by: string
-  created_at: string
-  updated_at: string
 }
 
 // Auth functions
@@ -195,6 +167,7 @@ export const createTeam = async (name: string, description?: string) => {
 // Room functions
 export const getTeamRooms = async (teamId: string) => {
   const { data, error } = await supabase.from("rooms").select("*").eq("team_id", teamId).order("created_at")
+
   return { data, error }
 }
 
@@ -282,92 +255,6 @@ export const sendMessage = async (
   return { data, error }
 }
 
-// Project functions
-export const getUserProjects = async () => {
-  const user = await getCurrentUser()
-  if (!user) return { data: [], error: "No user found" }
-
-  const { data, error } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("owner_id", user.id)
-    .order("created_at", { ascending: false })
-
-  return { data, error }
-}
-
-export const createProject = async (name: string, description?: string, framework?: string) => {
-  const user = await getCurrentUser()
-  if (!user) return { error: "No user found" }
-
-  // Create a default team for the project
-  const { data: team, error: teamError } = await createTeam(`${name} Team`, `Team for ${name} project`)
-  if (teamError) return { error: teamError }
-
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .insert({
-      name,
-      description,
-      framework,
-      team_id: team.id,
-      owner_id: user.id,
-    })
-    .select()
-    .single()
-
-  if (projectError) return { error: projectError }
-
-  return { data: project, error: null }
-}
-
-export const getProject = async (projectId: string) => {
-  const { data, error } = await supabase.from("projects").select("*").eq("id", projectId).single()
-  return { data, error }
-}
-
-// File functions
-export const getProjectFiles = async (projectId: string) => {
-  const { data, error } = await supabase
-    .from("files")
-    .select("*")
-    .eq("project_id", projectId)
-    .order("path")
-
-  return { data, error }
-}
-
-export const createFile = async (projectId: string, name: string, path: string, content?: string, language?: string) => {
-  const user = await getCurrentUser()
-  if (!user) return { error: "No user found" }
-
-  const { data, error } = await supabase
-    .from("files")
-    .insert({
-      name,
-      path,
-      content,
-      language,
-      project_id: projectId,
-      created_by: user.id,
-    })
-    .select()
-    .single()
-
-  return { data, error }
-}
-
-export const updateFile = async (fileId: string, content: string) => {
-  const { data, error } = await supabase
-    .from("files")
-    .update({ content, updated_at: new Date().toISOString() })
-    .eq("id", fileId)
-    .select()
-    .single()
-
-  return { data, error }
-}
-
 // Real-time subscriptions
 export const subscribeToMessages = (roomId: string, callback: (message: Message) => void) => {
   return supabase
@@ -404,24 +291,6 @@ export const subscribeToMessages = (roomId: string, callback: (message: Message)
     .subscribe()
 }
 
-export const subscribeToFileChanges = (projectId: string, callback: (file: FileDocument) => void) => {
-  return supabase
-    .channel(`project:${projectId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "files",
-        filter: `project_id=eq.${projectId}`,
-      },
-      (payload) => {
-        callback(payload.new as FileDocument)
-      },
-    )
-    .subscribe()
-}
-
 export const subscribeToUserStatus = (callback: (profile: Profile) => void) => {
   return supabase
     .channel("user_status")
@@ -441,32 +310,33 @@ export const subscribeToUserStatus = (callback: (profile: Profile) => void) => {
 
 // Call functions
 export const startCall = async (roomId: string, type: "voice" | "video") => {
-  const user = await getCurrentUser()
-  if (!user) return { error: "No user found" }
+  const { data: user } = await supabase.auth.getUser()
+  if (!user.user) throw new Error("Not authenticated")
 
   const { data, error } = await supabase
     .from("call_sessions")
     .insert({
       room_id: roomId,
       type,
-      started_by: user.id,
-      participants: [user.id],
+      started_by: user.user.id,
+      participants: [user.user.id],
     })
     .select()
     .single()
 
-  return { data, error }
+  if (error) throw error
+  return data
 }
 
 export const joinCall = async (callId: string) => {
-  const user = await getCurrentUser()
-  if (!user) return { error: "No user found" }
+  const { data: user } = await supabase.auth.getUser()
+  if (!user.user) throw new Error("Not authenticated")
 
   const { data: call } = await supabase.from("call_sessions").select("participants").eq("id", callId).single()
 
-  if (!call) return { error: "Call not found" }
+  if (!call) throw new Error("Call not found")
 
-  const participants = [...(call.participants || []), user.id]
+  const participants = [...(call.participants || []), user.user.id]
 
   const { data, error } = await supabase
     .from("call_sessions")
@@ -475,7 +345,8 @@ export const joinCall = async (callId: string) => {
     .select()
     .single()
 
-  return { data, error }
+  if (error) throw error
+  return data
 }
 
 export const endCall = async (callId: string) => {
@@ -486,7 +357,8 @@ export const endCall = async (callId: string) => {
     .select()
     .single()
 
-  return { data, error }
+  if (error) throw error
+  return data
 }
 
 // User presence
@@ -503,5 +375,6 @@ export const getOnlineUsers = async (teamId: string) => {
     .in("status", ["online", "away", "busy"])
     .order("last_seen", { ascending: false })
 
-  return { data, error }
+  if (error) throw error
+  return data
 }
