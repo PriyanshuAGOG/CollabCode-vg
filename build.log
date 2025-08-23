@@ -1,0 +1,51 @@
+
+> my-v0-project@0.1.0 build /app
+> next build
+
+   ▲ Next.js 15.2.4
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/23) ...
+   Generating static pages (5/23)
+   Generating static pages (11/23)
+   Generating static pages (17/23)
+ ✓ Generating static pages (23/23)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    6.73 kB         115 kB
+├ ○ /_not-found                            979 B         101 kB
+├ ƒ /api/ai/chat                           184 B         101 kB
+├ ƒ /api/integrations/ai                   184 B         101 kB
+├ ƒ /api/integrations/docker               184 B         101 kB
+├ ƒ /api/integrations/github               184 B         101 kB
+├ ƒ /api/integrations/webrtc/signaling     184 B         101 kB
+├ ƒ /api/webhooks/supabase                 184 B         101 kB
+├ ƒ /api/ws                                184 B         101 kB
+├ ○ /auth                                 4.2 kB         116 kB
+├ ○ /chat                                10.5 kB         131 kB
+├ ○ /community                           7.51 kB         116 kB
+├ ○ /dashboard                           5.34 kB         117 kB
+├ ○ /explore                             8.96 kB         122 kB
+├ ○ /help                                12.9 kB         126 kB
+├ ○ /integrations                        7.79 kB         129 kB
+├ ○ /pricing                              3.9 kB         113 kB
+├ ○ /profile                             4.97 kB         114 kB
+├ ƒ /project/[id]                        45.8 kB         194 kB
+├ ○ /projects                            6.93 kB         146 kB
+├ ○ /settings                            4.93 kB         114 kB
+└ ○ /teams                               8.94 kB         151 kB
++ First Load JS shared by all             100 kB
+  ├ chunks/4b8c6853-b4df0339951fd0ce.js  53.2 kB
+  ├ chunks/9544-71a3c899b8219b8d.js      45.3 kB
+  └ other shared chunks (total)          1.93 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

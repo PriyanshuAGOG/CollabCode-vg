@@ -1,13 +1,15 @@
-import { supabase } from "@/lib/supabase-client"
+import { databases, collections, dbId, client } from "@/lib/appwrite"
+import { ID, Query } from "appwrite"
 
 export interface Notification {
-  id: string
+  $id: string
+  user_id: string
   title: string
   message: string
   type: "info" | "success" | "warning" | "error"
   read: boolean
   data?: any
-  created_at: string
+  $createdAt: string
 }
 
 export class NotificationManager {
@@ -18,69 +20,83 @@ export class NotificationManager {
     type: "info" | "success" | "warning" | "error" = "info",
     data?: any,
   ) {
-    const { data: notification, error } = await supabase
-      .from("notifications")
-      .insert({
+    const notification = await databases.createDocument(
+      dbId,
+      collections.notifications,
+      ID.unique(),
+      {
         user_id: userId,
         title,
         message,
         type,
-        data,
-      })
-      .select()
-      .single()
-
-    if (error) throw error
+        data: data ? JSON.stringify(data) : undefined,
+      }
+    )
     return notification
   }
 
   static async getNotifications(userId: string, limit = 50) {
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(limit)
-
-    if (error) throw error
-    return data as Notification[]
+    const { documents } = await databases.listDocuments(
+      dbId,
+      collections.notifications,
+      [
+        Query.equal("user_id", userId),
+        Query.orderDesc("$createdAt"),
+        Query.limit(limit),
+      ]
+    )
+    return documents as Notification[]
   }
 
   static async markAsRead(notificationId: string) {
-    const { error } = await supabase.from("notifications").update({ read: true }).eq("id", notificationId)
-
-    if (error) throw error
+    await databases.updateDocument(
+      dbId,
+      collections.notifications,
+      notificationId,
+      { read: true }
+    )
   }
 
   static async markAllAsRead(userId: string) {
-    const { error } = await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("user_id", userId)
-      .eq("read", false)
+    const { documents } = await databases.listDocuments(
+      dbId,
+      collections.notifications,
+      [Query.equal("user_id", userId), Query.equal("read", false)]
+    )
 
-    if (error) throw error
+    await Promise.all(
+      documents.map((doc) =>
+        databases.updateDocument(
+          dbId,
+          collections.notifications,
+          doc.$id,
+          { read: true }
+        )
+      )
+    )
   }
 
   static async deleteNotification(notificationId: string) {
-    const { error } = await supabase.from("notifications").delete().eq("id", notificationId)
-
-    if (error) throw error
+    await databases.deleteDocument(
+      dbId,
+      collections.notifications,
+      notificationId
+    )
   }
 
   static subscribeToNotifications(userId: string, callback: (notification: Notification) => void) {
-    return supabase
-      .channel(`notifications:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => callback(payload.new as Notification),
-      )
-      .subscribe()
+    const channel = `databases.${dbId}.collections.${collections.notifications}.documents`
+    return client.subscribe(channel, (response) => {
+      // The server will broadcast all notification creations on this channel.
+      // We need to filter for the notifications for the current user.
+      // This is not ideal, but it's the only way without functions.
+      // A better approach is to use a function to broadcast to a user-specific channel.
+      if (response.events.includes(`databases.${dbId}.collections.${collections.notifications}.documents.*.create`)) {
+        const notification = response.payload as Notification;
+        if (notification.user_id === userId) {
+          callback(notification);
+        }
+      }
+    });
   }
 }

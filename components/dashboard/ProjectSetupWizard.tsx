@@ -133,7 +133,7 @@ export function ProjectSetupWizard({ onClose, onCreate }: ProjectSetupWizardProp
                 <Sparkles className="w-6 h-6 text-[#00D1FF]" />
                 AI-Powered Project Setup
               </CardTitle>
-              <p className="text-gray-400 mt-1">Let's create your next amazing project</p>
+              <p className="text-gray-400 mt-1">Let&apos;s create your next amazing project</p>
             </div>
             <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white">
               <X className="w-5 h-5" />

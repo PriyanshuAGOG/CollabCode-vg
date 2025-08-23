@@ -5,6 +5,7 @@ import "./globals.css"
 import { PremiumNavigation } from "@/components/PremiumNavigation"
 import { AuthGuard } from "@/components/AuthGuard"
 import { AuthProvider } from "@/components/auth/AuthProvider"
+import { MobileWarning } from "@/components/ui/mobile-warning"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -80,6 +81,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
       <body className="bg-deep-navy text-text-primary font-inter antialiased">
         <AuthProvider>
+          <MobileWarning />
           <PremiumNavigation />
           <AuthGuard>
             <main>{children}</main>

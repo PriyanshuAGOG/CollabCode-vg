@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Play, RotateCcw, Square, Circle, Type, Download } from "lucide-react"
 
 export function InteractiveDemoSection() {
+  const editorFontFamily = 'Monaco, "Cascadia Code", "Roboto Mono", monospace'
   const [code, setCode] = useState(`// Welcome to CollabCode!
 function TodoApp() {
   const [todos, setTodos] = useState([]);
@@ -246,7 +247,7 @@ function TodoApp() {
                         value={code}
                         onChange={(e) => setCode(e.target.value)}
                         className="w-full h-full bg-transparent text-white font-mono text-sm resize-none outline-none"
-                        style={{ fontFamily: 'Monaco, "Cascadia Code", "Roboto Mono", monospace' }}
+                        style={{ fontFamily: editorFontFamily }}
                       />
                     </div>
                   </div>

@@ -35,7 +35,7 @@ import {
   ArrowLeft,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { sendMessage as appwriteSendMessage } from "@/lib/appwrite"
 import { WebRTCManager } from "@/lib/integrations/webrtc"
 
 interface ChatMessage {
@@ -109,7 +109,8 @@ export function ModernChatInterface() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const localVideoRef = useRef<HTMLVideoElement>(null)
-  const webRTCManager = useRef<WebRTCManager | null>(null)
+  // TODO: Implement with Jitsi
+  // const webRTCManager = useRef<WebRTCManager | null>(null)
 
   const [teams] = useState<Team[]>([
     {
@@ -281,23 +282,23 @@ function calculateProjectVelocity(sprints) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  useEffect(() => {
-    // Initialize WebRTC manager
-    webRTCManager.current = new WebRTCManager(
-      (userId, stream) => {
-        // Handle remote stream
-        setCallParticipants((prev) => prev.map((p) => (p.id === userId ? { ...p, stream } : p)))
-      },
-      (userId) => {
-        // Handle user disconnected
-        setCallParticipants((prev) => prev.filter((p) => p.id !== userId))
-      },
-    )
-
-    return () => {
-      webRTCManager.current?.disconnectAll()
-    }
-  }, [])
+  // useEffect(() => {
+  //   // Initialize WebRTC manager
+  //   webRTCManager.current = new WebRTCManager(
+  //     (userId, stream) => {
+  //       // Handle remote stream
+  //       setCallParticipants((prev) => prev.map((p) => (p.id === userId ? { ...p, stream } : p)))
+  //     },
+  //     (userId) => {
+  //       // Handle user disconnected
+  //       setCallParticipants((prev) => prev.filter((p) => p.id !== userId))
+  //     },
+  //   )
+  //
+  //   return () => {
+  //     webRTCManager.current?.disconnectAll()
+  //   }
+  // }, [])
 
   const sendMessage = async () => {
     if (!message.trim()) return
@@ -306,7 +307,7 @@ function calculateProjectVelocity(sprints) {
       id: Date.now().toString(),
       content: message,
       author: {
-        id: "current-user",
+        id: "current-user", // TODO: replace with real user id
         name: "You",
         status: "online",
       },
@@ -317,95 +318,25 @@ function calculateProjectVelocity(sprints) {
     setMessages((prev) => [...prev, newMessage])
     setMessage("")
 
-    // Send to Supabase
+    // Send to Appwrite
     try {
-      await supabase.from("messages").insert({
-        content: message,
-        room_id: activeRoom,
-        user_id: "current-user",
-        type: "text",
-      })
+      await appwriteSendMessage(
+        activeRoom,
+        message,
+        "text",
+        "current-user" // TODO: replace with real user id
+      )
     } catch (error) {
       console.error("Failed to send message:", error)
     }
   }
 
-  const startVoiceCall = async () => {
-    try {
-      const stream = await webRTCManager.current?.initializeLocalStream(false, true)
-      if (stream) {
-        setLocalStream(stream)
-        setIsVoiceCallActive(true)
-        setCallParticipants([
-          {
-            id: "current-user",
-            name: "You",
-            isVideoOn: false,
-            isAudioOn: true,
-            isSpeaking: false,
-            stream,
-          },
-        ])
-      }
-    } catch (error) {
-      console.error("Failed to start voice call:", error)
-    }
-  }
-
-  const startVideoCall = async () => {
-    try {
-      const stream = await webRTCManager.current?.initializeLocalStream(true, true)
-      if (stream && localVideoRef.current) {
-        localVideoRef.current.srcObject = stream
-        setLocalStream(stream)
-        setIsVideoCallActive(true)
-        setCallParticipants([
-          {
-            id: "current-user",
-            name: "You",
-            isVideoOn: true,
-            isAudioOn: true,
-            isSpeaking: false,
-            stream,
-          },
-        ])
-      }
-    } catch (error) {
-      console.error("Failed to start video call:", error)
-    }
-  }
-
-  const endCall = () => {
-    webRTCManager.current?.disconnectAll()
-    setIsVoiceCallActive(false)
-    setIsVideoCallActive(false)
-    setCallParticipants([])
-    setLocalStream(null)
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null
-    }
-  }
-
-  const toggleMute = () => {
-    setIsMuted(!isMuted)
-    webRTCManager.current?.toggleAudio(!isMuted)
-  }
-
-  const toggleVideo = () => {
-    setIsVideoEnabled(!isVideoEnabled)
-    webRTCManager.current?.toggleVideo(!isVideoEnabled)
-  }
-
-  const startScreenShare = async () => {
-    try {
-      const screenStream = await webRTCManager.current?.startScreenShare()
-      if (screenStream) {
-        setIsScreenSharing(true)
-      }
-    } catch (error) {
-      console.error("Failed to start screen share:", error)
-    }
-  }
+  // const startVoiceCall = async () => { ... }
+  // const startVideoCall = async () => { ... }
+  // const endCall = () => { ... }
+  // const toggleMute = () => { ... }
+  // const toggleVideo = () => { ... }
+  // const startScreenShare = async () => { ... }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -486,7 +417,7 @@ function calculateProjectVelocity(sprints) {
             />
           </div>
 
-          <Button
+          {/* <Button
             onClick={startVoiceCall}
             size="sm"
             variant="ghost"
@@ -501,7 +432,7 @@ function calculateProjectVelocity(sprints) {
             className="text-bright-cyan hover:text-white hover:bg-bright-cyan/10 transition-all duration-200"
           >
             <Video className="w-4 h-4" />
-          </Button>
+          </Button> */}
           <Button
             size="sm"
             variant="ghost"
@@ -604,106 +535,7 @@ function calculateProjectVelocity(sprints) {
         {/* Messages Area */}
         <div className="flex-1 flex flex-col relative z-10">
           {/* Call Interface */}
-          {(isVoiceCallActive || isVideoCallActive) && (
-            <div className="bg-black/80 backdrop-blur-xl border-b border-green-500/10 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center animate-pulse">
-                    {isVideoCallActive ? (
-                      <VideoIcon className="w-4 h-4 text-white" />
-                    ) : (
-                      <PhoneCall className="w-4 h-4 text-white" />
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-white font-medium">
-                      {isVideoCallActive ? "Video Call" : "Voice Call"} • #{activeRoomData?.name}
-                    </h3>
-                    <p className="text-sm text-text-secondary">{callParticipants.length} participant(s)</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={toggleMute}
-                    className={`${
-                      isMuted ? "bg-red-500 hover:bg-red-600" : "bg-dark-slate/60 hover:bg-dark-slate/80"
-                    } text-white`}
-                  >
-                    {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                  </Button>
-
-                  {isVideoCallActive && (
-                    <Button
-                      size="sm"
-                      onClick={toggleVideo}
-                      className={`${
-                        !isVideoEnabled ? "bg-red-500 hover:bg-red-600" : "bg-dark-slate/60 hover:bg-dark-slate/80"
-                      } text-white`}
-                    >
-                      {isVideoEnabled ? <VideoIcon className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
-                    </Button>
-                  )}
-
-                  <Button
-                    size="sm"
-                    onClick={startScreenShare}
-                    className="bg-dark-slate/60 hover:bg-dark-slate/80 text-white"
-                  >
-                    <Monitor className="w-4 h-4" />
-                  </Button>
-
-                  <Button size="sm" onClick={endCall} className="bg-red-500 hover:bg-red-600 text-white">
-                    <PhoneOff className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Video Grid */}
-              {isVideoCallActive && (
-                <div className="mt-4 grid grid-cols-2 gap-2 max-h-48">
-                  {callParticipants.map((participant) => (
-                    <div key={participant.id} className="relative bg-dark-slate/60 rounded-lg overflow-hidden">
-                      {participant.stream && participant.isVideoOn ? (
-                        <video
-                          ref={participant.id === "current-user" ? localVideoRef : undefined}
-                          autoPlay
-                          muted={participant.id === "current-user"}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-32 flex items-center justify-center">
-                          <Avatar className="w-16 h-16">
-                            <AvatarImage src={participant.avatar || "/placeholder.svg"} />
-                            <AvatarFallback className="bg-gradient-to-r from-bright-cyan to-bright-purple text-white text-lg">
-                              {participant.name.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-                      )}
-
-                      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-                        <Badge className="bg-black/60 text-white text-xs">{participant.name}</Badge>
-                        <div className="flex gap-1">
-                          {!participant.isAudioOn && (
-                            <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-                              <MicOff className="w-3 h-3 text-white" />
-                            </div>
-                          )}
-                          {participant.isSpeaking && (
-                            <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center animate-pulse">
-                              <Volume2 className="w-3 h-3 text-white" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {/* {(isVoiceCallActive || isVideoCallActive) && ( ... )} */}
 
           {/* Messages */}
           <ScrollArea className="flex-1 p-6">

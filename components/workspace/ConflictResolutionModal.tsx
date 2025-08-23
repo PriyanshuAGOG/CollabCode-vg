@@ -111,7 +111,7 @@ export function ConflictResolutionModal({ isOpen, onClose, conflictData, onResol
                     onClick={() => handleResolutionChange(conflict.id, "remote")}
                     className="flex items-center gap-2"
                   >
-                    <Badge variant="secondary">{conflict.remoteUser}'s Version</Badge>
+                    <Badge variant="secondary">{conflict.remoteUser}&apos;s Version</Badge>
                   </Button>
                   <Button
                     size="sm"
@@ -132,7 +132,7 @@ export function ConflictResolutionModal({ isOpen, onClose, conflictData, onResol
                     </pre>
                   </div>
                   <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-blue-400">{conflict.remoteUser}'s Version</h4>
+                    <h4 className="text-sm font-medium text-blue-400">{conflict.remoteUser}&apos;s Version</h4>
                     <pre className="bg-blue-500/10 border border-blue-500/20 rounded p-3 text-sm font-mono overflow-x-auto">
                       {conflict.remoteContent}
                     </pre>
