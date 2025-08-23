@@ -510,7 +510,7 @@ export default function HelpPage() {
                     <MessageCircle className="w-12 h-12 text-text-muted" />
                   </div>
                   <h3 className="text-xl font-bold text-text-primary mb-2">No support tickets</h3>
-                  <p className="text-text-secondary mb-6">You haven't created any support tickets yet</p>
+                  <p className="text-text-secondary mb-6">You haven&apos;t created any support tickets yet</p>
                   <Button className="cyber-button text-white font-semibold">
                     <Plus className="w-4 h-4 mr-2" />
                     Create Your First Ticket

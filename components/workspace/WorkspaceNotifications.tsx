@@ -226,7 +226,7 @@ export function WorkspaceNotifications({ isOpen, onToggle }: WorkspaceNotificati
                 <Bell className="w-8 h-8 text-gray-400" />
               </div>
               <h3 className="text-lg font-bold text-white mb-2">All caught up!</h3>
-              <p className="text-gray-400 text-sm">You're all up to date. New notifications will appear here.</p>
+              <p className="text-gray-400 text-sm">You&apos;re all up to date. New notifications will appear here.</p>
             </div>
           )}
         </ScrollArea>

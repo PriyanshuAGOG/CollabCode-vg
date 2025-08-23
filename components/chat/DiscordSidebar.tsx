@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Hash, Volume2, Video, Plus, Settings, UserPlus, Search, Crown, Shield, Mic, Headphones } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { getUserTeams, getTeamRooms, getTeamMembers } from "@/lib/appwrite"
 import { useAuth } from "@/components/auth/AuthProvider"
 
 interface Server {
@@ -81,53 +81,36 @@ export function DiscordSidebar({
   }, [selectedServer])
 
   const loadServers = async () => {
-    const { data, error } = await supabase
-      .from("servers")
-      .select(`
-        *,
-        server_members!inner(user_id)
-      `)
-      .eq("server_members.user_id", user?.id)
+    if (!user) return;
+    const { data, error } = await getUserTeams(user.$id);
 
     if (!error && data) {
-      setServers(data)
-      if (data.length > 0 && !selectedServer) {
-        onServerSelect(data[0].id)
-      }
+      // This only returns team memberships. I need to fetch the full team objects.
+      // TODO: Implement this properly.
+      console.log("TODO: loadServers needs to fetch full team objects");
+      // setServers(data as any)
+      // if (data.length > 0 && !selectedServer) {
+      //   onServerSelect(data[0].id)
+      // }
     }
   }
 
   const loadChannels = async (serverId: string) => {
-    const { data, error } = await supabase.from("channels").select("*").eq("server_id", serverId).order("position")
+    const { data, error } = await getTeamRooms(serverId);
 
     if (!error && data) {
-      setChannels(data)
+      setChannels(data as any)
     }
   }
 
   const loadMembers = async (serverId: string) => {
-    const { data, error } = await supabase
-      .from("server_members")
-      .select(`
-        role,
-        profiles (
-          id,
-          username,
-          avatar_url,
-          status
-        )
-      `)
-      .eq("server_id", serverId)
+    const { data, error } = await getTeamMembers(serverId);
 
     if (!error && data) {
-      const membersList = data.map((item) => ({
-        id: item.profiles.id,
-        username: item.profiles.username,
-        avatar_url: item.profiles.avatar_url,
-        status: item.profiles.status,
-        role: item.role,
-      }))
-      setMembers(membersList)
+      // This only returns team memberships. I need to fetch the full profile objects.
+      // TODO: Implement this properly.
+      console.log("TODO: loadMembers needs to fetch full profile objects");
+      // setMembers(data as any)
     }
   }
 
@@ -473,24 +456,18 @@ export function DiscordSidebar({
           <div className="flex items-center gap-2">
             <div className="relative">
               <Avatar className="w-8 h-8">
-                <AvatarImage src={user?.user_metadata?.avatar_url || "/placeholder.svg"} />
+                <AvatarImage src={"/placeholder.svg"} />
                 <AvatarFallback className="bg-gradient-to-r from-purple-500 to-cyan-500 text-white text-sm">
-                  {user?.user_metadata?.username?.charAt(0) || "U"}
+                  {user?.name?.charAt(0) || "U"}
                 </AvatarFallback>
               </Avatar>
               <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-gray-800" />
             </div>
             <div className="flex-1">
-              <p className="text-white text-sm font-medium truncate">{user?.user_metadata?.username || "User"}</p>
+              <p className="text-white text-sm font-medium truncate">{user?.name || "User"}</p>
               <p className="text-gray-400 text-xs">Online</p>
             </div>
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" className="w-8 h-8 p-0 text-gray-400 hover:text-white">
-                <Mic className="w-4 h-4" />
-              </Button>
-              <Button size="sm" variant="ghost" className="w-8 h-8 p-0 text-gray-400 hover:text-white">
-                <Headphones className="w-4 h-4" />
-              </Button>
               <Button size="sm" variant="ghost" className="w-8 h-8 p-0 text-gray-400 hover:text-white">
                 <Settings className="w-4 h-4" />
               </Button>

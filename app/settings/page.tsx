@@ -245,7 +245,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-text-primary">Offline Mode</h3>
-                <p className="text-text-secondary">Enable offline editing and sync when you're back online</p>
+                <p className="text-text-secondary">Enable offline editing and sync when you&apos;re back online</p>
               </div>
               <button
                 onClick={() => setOfflineMode(!offlineMode)}
@@ -264,7 +264,7 @@ export default function SettingsPage() {
               <Card className="glass-card border-yellow-500/30 bg-yellow-500/10">
                 <CardContent className="p-4">
                   <p className="text-yellow-400 text-sm">
-                    ⚠️ Offline mode is enabled. Your changes will sync when you're back online.
+                    ⚠️ Offline mode is enabled. Your changes will sync when you&apos;re back online.
                   </p>
                 </CardContent>
               </Card>

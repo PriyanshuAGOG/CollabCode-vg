@@ -230,7 +230,7 @@ export function NotificationCenter() {
               </div>
               <h3 className="text-lg font-bold text-text-primary mb-2">No notifications</h3>
               <p className="text-text-secondary text-sm">
-                You're all caught up! We'll notify you when something new happens.
+                You&apos;re all caught up! We&apos;ll notify you when something new happens.
               </p>
             </div>
           )}

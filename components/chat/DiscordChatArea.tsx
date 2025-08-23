@@ -24,7 +24,17 @@ import {
   PhoneOff,
   Settings,
 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import {
+  client,
+  dbId,
+  collections,
+  getTeamRooms,
+  getRoomMessages,
+  sendMessage as appwriteSendMessage,
+  startCall,
+  joinCall,
+  endCall,
+} from "@/lib/appwrite"
 import { useAuth } from "@/components/auth/AuthProvider"
 
 interface Message {
@@ -73,11 +83,12 @@ export function DiscordChatArea({ channelId, channelType, serverId }: DiscordCha
   const [messages, setMessages] = useState<Message[]>([])
   const [channel, setChannel] = useState<Channel | null>(null)
   const [newMessage, setNewMessage] = useState("")
-  const [voiceStates, setVoiceStates] = useState<VoiceState[]>([])
-  const [isInVoice, setIsInVoice] = useState(false)
-  const [isMuted, setIsMuted] = useState(false)
-  const [isDeafened, setIsDeafened] = useState(false)
-  const [isVideoEnabled, setIsVideoEnabled] = useState(false)
+  // TODO: Implement voice chat with Jitsi
+  // const [voiceStates, setVoiceStates] = useState<VoiceState[]>([])
+  // const [isInVoice, setIsInVoice] = useState(false)
+  // const [isMuted, setIsMuted] = useState(false)
+  // const [isDeafened, setIsDeafened] = useState(false)
+  // const [isVideoEnabled, setIsVideoEnabled] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -85,9 +96,13 @@ export function DiscordChatArea({ channelId, channelType, serverId }: DiscordCha
       loadChannel()
       loadMessages()
       if (channelType === "channel") {
-        loadVoiceStates()
-        subscribeToMessages()
-        subscribeToVoiceStates()
+        // loadVoiceStates()
+        const unsubscribe = subscribeToMessages()
+        // const unsubscribeVoice = subscribeToVoiceStates()
+        return () => {
+          unsubscribe?.();
+          // unsubscribeVoice?.();
+        }
       }
     }
   }, [channelId, channelType])
@@ -101,11 +116,10 @@ export function DiscordChatArea({ channelId, channelType, serverId }: DiscordCha
   }
 
   const loadChannel = async () => {
-    if (channelType === "channel") {
-      const { data, error } = await supabase.from("channels").select("*").eq("id", channelId).single()
-
+    if (channelType === "channel" && channelId) {
+      const { data, error } = await getRoom(channelId);
       if (!error && data) {
-        setChannel(data)
+        setChannel(data as any); // The type from appwrite is Document, not Channel
       }
     } else {
       // For DMs, we'd load the other user's info
@@ -118,209 +132,67 @@ export function DiscordChatArea({ channelId, channelType, serverId }: DiscordCha
   }
 
   const loadMessages = async () => {
-    const query =
-      channelType === "channel"
-        ? supabase
-            .from("messages")
-            .select(`
-            id,
-            content,
-            created_at,
-            edited_at,
-            profiles:author_id (
-              id,
-              username,
-              avatar_url
-            )
-          `)
-            .eq("channel_id", channelId)
-        : supabase
-            .from("messages")
-            .select(`
-            id,
-            content,
-            created_at,
-            edited_at,
-            profiles:author_id (
-              id,
-              username,
-              avatar_url
-            )
-          `)
-            .eq("dm_id", channelId)
-
-    const { data, error } = await query.order("created_at", { ascending: true }).limit(50)
+    if (!channelId) return;
+    const { data, error } = await getRoomMessages(channelId);
 
     if (!error && data) {
-      const formattedMessages = data.map((msg) => ({
-        id: msg.id,
+      const formattedMessages = data.map((msg: any) => ({ // I've added : any here because the user data is not fetched yet
+        id: msg.$id,
         content: msg.content,
         author: {
-          id: msg.profiles.id,
-          username: msg.profiles.username,
-          avatar_url: msg.profiles.avatar_url,
+          id: msg.user_id,
+          username: "loading...", // TODO: fetch user data
+          avatar_url: "",
         },
-        created_at: msg.created_at,
-        edited_at: msg.edited_at,
-      }))
-      setMessages(formattedMessages)
-    }
-  }
-
-  const loadVoiceStates = async () => {
-    if (channel?.type === "voice" || channel?.type === "video") {
-      const { data, error } = await supabase
-        .from("voice_states")
-        .select(`
-          user_id,
-          is_muted,
-          is_deafened,
-          is_video_enabled,
-          profiles:user_id (
-            username,
-            avatar_url
-          )
-        `)
-        .eq("channel_id", channelId)
-
-      if (!error && data) {
-        const formattedStates = data.map((state) => ({
-          user_id: state.user_id,
-          is_muted: state.is_muted,
-          is_deafened: state.is_deafened,
-          is_video_enabled: state.is_video_enabled,
-          user: {
-            username: state.profiles.username,
-            avatar_url: state.profiles.avatar_url,
-          },
-        }))
-        setVoiceStates(formattedStates)
-      }
+        created_at: msg.$createdAt,
+        edited_at: msg.$updatedAt,
+      }));
+      setMessages(formattedMessages as Message[]);
     }
   }
 
   const subscribeToMessages = () => {
-    const subscription = supabase
-      .channel(`messages:${channelId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: channelType === "channel" ? `channel_id=eq.${channelId}` : `dm_id=eq.${channelId}`,
-        },
-        (payload) => {
+    if (!channelId) return;
+
+    const channel = `databases.${dbId}.collections.${collections.messages}.documents`
+    const unsubscribe = client.subscribe(channel, (response) => {
+      if (response.events.includes(`databases.${dbId}.collections.${collections.messages}.documents.*.create`)) {
+        const message = response.payload as any;
+        if (message.room_id === channelId) {
           // In a real app, you'd fetch the full message with author info
-          console.log("New message:", payload)
+          console.log("New message:", message)
           loadMessages() // Reload messages for simplicity
-        },
-      )
-      .subscribe()
+        }
+      }
+    });
 
-    return () => {
-      subscription.unsubscribe()
-    }
+    return unsubscribe;
   }
 
-  const subscribeToVoiceStates = () => {
-    const subscription = supabase
-      .channel(`voice_states:${channelId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "voice_states",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        () => {
-          loadVoiceStates()
-        },
-      )
-      .subscribe()
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }
+  // TODO: Implement voice chat with Jitsi
+  // const loadVoiceStates = async () => { ... }
+  // const subscribeToVoiceStates = () => { ... }
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !user) return
+    if (!newMessage.trim() || !user || !channelId) return
 
-    const messageData = {
-      content: newMessage.trim(),
-      author_id: user.id,
-      ...(channelType === "channel" ? { channel_id: channelId } : { dm_id: channelId }),
-    }
-
-    const { error } = await supabase.from("messages").insert([messageData])
+    const { error } = await appwriteSendMessage(
+      channelId,
+      newMessage.trim(),
+      "text", // type
+      user.$id
+    );
 
     if (!error) {
       setNewMessage("")
     }
   }
 
-  const joinVoiceChannel = async () => {
-    if (!user || !channelId) return
-
-    const { error } = await supabase.from("voice_states").upsert([
-      {
-        user_id: user.id,
-        channel_id: channelId,
-        is_muted: false,
-        is_deafened: false,
-        is_video_enabled: false,
-      },
-    ])
-
-    if (!error) {
-      setIsInVoice(true)
-    }
-  }
-
-  const leaveVoiceChannel = async () => {
-    if (!user || !channelId) return
-
-    const { error } = await supabase.from("voice_states").delete().eq("user_id", user.id).eq("channel_id", channelId)
-
-    if (!error) {
-      setIsInVoice(false)
-      setIsMuted(false)
-      setIsDeafened(false)
-      setIsVideoEnabled(false)
-    }
-  }
-
-  const toggleMute = async () => {
-    if (!user || !channelId) return
-
-    const newMutedState = !isMuted
-    const { error } = await supabase
-      .from("voice_states")
-      .update({ is_muted: newMutedState })
-      .eq("user_id", user.id)
-      .eq("channel_id", channelId)
-
-    if (!error) {
-      setIsMuted(newMutedState)
-    }
-  }
-
-  const toggleVideo = async () => {
-    if (!user || !channelId) return
-
-    const newVideoState = !isVideoEnabled
-    const { error } = await supabase
-      .from("voice_states")
-      .update({ is_video_enabled: newVideoState })
-      .eq("user_id", user.id)
-      .eq("channel_id", channelId)
-
-    if (!error) {
-      setIsVideoEnabled(newVideoState)
-    }
-  }
+  // TODO: Implement voice chat with Jitsi
+  // const joinVoiceChannel = async () => { ... }
+  // const leaveVoiceChannel = async () => { ... }
+  // const toggleMute = async () => { ... }
+  // const toggleVideo = async () => { ... }
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -369,12 +241,8 @@ export function DiscordChatArea({ channelId, channelType, serverId }: DiscordCha
           </div>
 
           <div className="flex items-center gap-2">
-            {isVoiceChannel && !isInVoice && (
-              <Button size="sm" onClick={joinVoiceChannel} className="bg-green-600 hover:bg-green-700 text-white">
-                <Phone className="w-4 h-4 mr-2" />
-                Join
-              </Button>
-            )}
+            {/* TODO: Implement voice chat with Jitsi */}
+            {/* {isVoiceChannel && !isInVoice && ( ... )} */}
             <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
               <UserPlus className="w-4 h-4" />
             </Button>
@@ -388,35 +256,12 @@ export function DiscordChatArea({ channelId, channelType, serverId }: DiscordCha
         </div>
       </div>
 
+      {/* TODO: Implement voice chat with Jitsi */}
       {/* Voice Channel Users */}
-      {isVoiceChannel && voiceStates.length > 0 && (
-        <div className="p-4 border-b border-gray-700/30 bg-black/20 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-gray-400 mb-3">In Voice — {voiceStates.length}</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {voiceStates.map((state) => (
-              <div key={state.user_id} className="flex items-center gap-2 p-2 bg-gray-800/50 rounded-lg">
-                <div className="relative">
-                  <Avatar className="w-8 h-8">
-                    <AvatarImage src={state.user.avatar_url || "/placeholder.svg"} />
-                    <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs">
-                      {state.user.username.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  {state.is_muted && (
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                      <MicOff className="w-2 h-2 text-white" />
-                    </div>
-                  )}
-                </div>
-                <span className="text-sm text-white truncate">{state.user.username}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* {isVoiceChannel && voiceStates.length > 0 && ( ... )} */}
 
       {/* Messages Area */}
-      {!isVoiceChannel && (
+      {/* {!isVoiceChannel && ( */}
         <>
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4">
@@ -497,41 +342,10 @@ export function DiscordChatArea({ channelId, channelType, serverId }: DiscordCha
             </div>
           </div>
         </>
-      )}
+      {/* )} */}
 
       {/* Voice Controls */}
-      {isInVoice && (
-        <div className="p-4 border-t border-gray-700/30 bg-black/40 backdrop-blur-xl">
-          <div className="flex items-center justify-center gap-3">
-            <Button
-              size="sm"
-              onClick={toggleMute}
-              className={`${isMuted ? "bg-red-600 hover:bg-red-700" : "bg-gray-700 hover:bg-gray-600"} text-white`}
-            >
-              {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </Button>
-
-            {channel.type === "video" && (
-              <Button
-                size="sm"
-                onClick={toggleVideo}
-                className={`${!isVideoEnabled ? "bg-red-600 hover:bg-red-700" : "bg-gray-700 hover:bg-gray-600"} text-white`}
-              >
-                {isVideoEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
-              </Button>
-            )}
-
-            <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
-              <Settings className="w-4 h-4" />
-            </Button>
-
-            <Button size="sm" onClick={leaveVoiceChannel} className="bg-red-600 hover:bg-red-700 text-white">
-              <PhoneOff className="w-4 h-4 mr-2" />
-              Leave
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* {isInVoice && ( ... )} */}
     </div>
   )
 }

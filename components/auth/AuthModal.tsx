@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { signUp, signIn, createUserProfile } from "@/lib/supabase"
+import { signUp, signIn } from "@/lib/appwrite"
 import { Sparkles, Mail, Lock, User, Eye, EyeOff } from "lucide-react"
 
 interface AuthModalProps {
@@ -40,8 +40,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       const { data, error } = await signIn(signInEmail, signInPassword)
 
       if (error) {
-        setError(error.message)
-      } else if (data.user) {
+        setError((error as any).message || "An error occurred")
+      } else if (data) {
         onClose()
       }
     } catch (err) {
@@ -72,10 +72,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       const { data, error } = await signUp(signUpEmail, signUpPassword, signUpUsername)
 
       if (error) {
-        setError(error.message)
-      } else if (data.user) {
-        // Create user profile
-        await createUserProfile(data.user.id, signUpUsername, signUpEmail)
+        setError((error as any).message || "An error occurred")
+      } else if (data) {
+        // After signing up, we should probably sign in the user automatically
+        // For now, just close the modal and let the user sign in manually
         onClose()
       }
     } catch (err) {
